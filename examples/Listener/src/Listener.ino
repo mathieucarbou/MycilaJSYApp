@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/*
+ * Copyright (C) 2023-2025 Mathieu Carbou
+ */
 #include <Arduino.h>
 #include <AsyncUDP.h>
 #include <WiFi.h>
