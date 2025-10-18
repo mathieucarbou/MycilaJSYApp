@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+/*
+ * Copyright (C) 2023-2025 Mathieu Carbou
+ */
 #include <Arduino.h>
 
 #include <AsyncUDP.h>
@@ -176,9 +180,6 @@ static int8_t historyX[MYCILA_GRAPH_POINTS] = {0};
 static int16_t power1HistoryY[MYCILA_GRAPH_POINTS] = {0};
 static int16_t power2HistoryY[MYCILA_GRAPH_POINTS] = {0};
 static int16_t power3HistoryY[MYCILA_GRAPH_POINTS] = {0};
-
-static std::string hostname;
-static std::string ssid;
 
 static bool udpSendEnabled = true;
 static uint16_t jsyModel = MYCILA_JSY_MK_UNKNOWN;
@@ -384,6 +385,24 @@ static int log_redirect_vprintf(const char* format, va_list args) {
   return written;
 }
 
+static int get_id_param(const AsyncWebServerRequest* request) {
+  const AsyncWebParameter* idParam = request->getParam("id");
+  if (idParam == nullptr) {
+    return -1;
+  }
+  int id = idParam->value().toInt();
+  // JSY-MK-163 and JSY1031 => id must be 0
+  // JSY-MK-333 => id can be 0, 1 or 2
+  // others, 2 channels => id must be 0 or 1
+  if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
+    return id == 0 ? 0 : -1;
+  }
+  if (prevData.model == MYCILA_JSY_MK_333) {
+    return id < 0 || id > 2 ? -1 : id;
+  }
+  return id == 0 || id == 1 ? id : -1;
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -402,9 +421,8 @@ void setup() {
   esp_log_set_vprintf(log_redirect_vprintf);
 
   // hostname
-  hostname = std::string("jsy-") + Mycila::System::getChipIDStr();
+  static std::string hostname = std::string("jsy-") + Mycila::System::getChipIDStr();
   std::transform(hostname.begin(), hostname.end(), hostname.begin(), ::tolower);
-  ssid = std::string("JSY-") + Mycila::System::getChipIDStr();
 
   // logging
   ESP_LOGW(TAG, "Booting " MYCILA_APP_NAME "...");
@@ -455,21 +473,45 @@ void setup() {
   // Dashboard - Routes
   webServer.rewrite("/", "/dashboard").setFilter([](AsyncWebServerRequest* request) { return espConnect.getState() != Mycila::ESPConnect::State::PORTAL_STARTED; });
 
-  // API - Routes
+  // API: /api/jsy/reset
+  // Resets the energy counters
   webServer.on("/api/jsy/reset", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
     // if the reset cannot be done because the JSY is too busy then 409 conflict is returned
     request->send(jsy.resetEnergy() ? 200 : 409);
   });
+  // API: /api/jsy/publish
+  // With no query parameter: returns the UDP data publishing state
+  // With "switch" query parameter set to "on" or "off": enables or disables UDP data publishing
+  webServer.on("/api/jsy/publish", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
+    const AsyncWebParameter* enableParam = request->getParam("switch");
+    if (enableParam != nullptr) {
+      udpSendEnabled = enableParam->value() == "on";
+      preferences.putBool("udp_send", udpSendEnabled);
+      publishDataCard.setValue(udpSendEnabled);
+      dashboard.refresh(publishDataCard);
+    }
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    root["switch"] = udpSendEnabled ? "on" : "off";
+    request->send(200);
+  });
+
+  // API: /api/jsy
+  // Returns the current JSY data in JSON format
   webServer.on("/api/jsy", HTTP_GET, [](AsyncWebServerRequest* request) {
     AsyncJsonResponse* response = new AsyncJsonResponse();
     jsy.toJson(response->getRoot());
     response->setLength();
     request->send(response);
   });
+  // API: /api/restart
+  // Restarts the device
   webServer.on("/api/restart", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
     restartTask.resume();
     request->send(200);
   });
+  // API: /api/reset
+  // Resets the device to factory defaults
   webServer.on("/api/reset", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
     espConnect.clearConfiguration();
     restartTask.resume();
@@ -477,13 +519,200 @@ void setup() {
   });
 
   // API Routes to fake Shelly EM and 3EM
-  // webServer.on("/rpc/Shelly.GetDeviceInfo", HTTP_GET, [](AsyncWebServerRequest* request) {
-  //   AsyncJsonResponse* response = new AsyncJsonResponse();
-  //   JsonObject root = response->getRoot();
-  //   root["name"] = ""
-  //   response->setLength();
-  //   request->send(response);
-  // });
+
+  // API: /rpc/Shelly.GetDeviceInfo
+  // For: Shelly EM & Shelly Pro EM
+  // Return the device information
+  webServer.on("/rpc/Shelly.GetDeviceInfo", HTTP_GET, [](AsyncWebServerRequest* request) {
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    root["name"] = "Mycila JSY App";
+    root["id"] = (prevData.model == MYCILA_JSY_MK_333 ? "shellypro3em-" : "shellyproem50-") + espConnect.getMACAddress();
+    root["mac"] = espConnect.getMACAddress();
+    root["ver"] = MYCILA_JSY_VERSION;
+    root["app"] = prevData.model == MYCILA_JSY_MK_333 ? "3EM" : "EM";
+    response->setLength();
+    request->send(response);
+  });
+  // API: /rpc/EM1.GetStatus?id=0|1|2
+  // For: Shelly EM & 3EM
+  // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EM1/#em1getstatus-example
+  // Example: { "id": 0, "voltage": 240.2, "current": 6.473, "act_power": 1327.6, "aprt_power": 1557.6, "pf": 0.87, "freq": 50, "calibration": "factory" }
+  webServer.on("/rpc/EM1.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
+    int id = get_id_param(request);
+    if (id == -1) {
+      request->send(500);
+      return;
+    }
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    root["id"] = id;
+    if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
+      root["voltage"] = prevData.single().voltage;
+      root["current"] = prevData.single().current;
+      root["act_power"] = prevData.single().activePower;
+      root["aprt_power"] = prevData.single().apparentPower;
+      root["pf"] = prevData.single().powerFactor;
+      root["freq"] = prevData.single().frequency;
+    } else if (prevData.model == MYCILA_JSY_MK_333) {
+      root["voltage"] = prevData.phase(id).voltage;
+      root["current"] = prevData.phase(id).current;
+      root["act_power"] = prevData.phase(id).activePower;
+      root["aprt_power"] = prevData.phase(id).apparentPower;
+      root["pf"] = prevData.phase(id).powerFactor;
+      root["freq"] = prevData.phase(id).frequency;
+    } else {
+      root["voltage"] = prevData.channel(id).voltage;
+      root["current"] = prevData.channel(id).current;
+      root["act_power"] = prevData.channel(id).activePower;
+      root["aprt_power"] = prevData.channel(id).apparentPower;
+      root["pf"] = prevData.channel(id).powerFactor;
+      root["freq"] = prevData.channel(id).frequency;
+    }
+    root["calibration"] = "factory";
+    response->setLength();
+    request->send(response);
+  });
+  // API: /rpc/EM1Data.GetStatus?id=0|1|2
+  // For: Shelly EM & 3EM
+  // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EM1Data/#em1datagetstatus-example
+  // Example: { "id": 0, "total_act_energy": 2776175.11, "total_act_ret_energy": 571584.87 }
+  webServer.on("/rpc/EM1Data.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
+    int id = get_id_param(request);
+    if (id == -1) {
+      request->send(500);
+      return;
+    }
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    root["id"] = id;
+    if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
+      root["total_act_energy"] = prevData.single().activeEnergy;
+      root["total_act_ret_energy"] = prevData.single().activeEnergyReturned;
+    } else if (prevData.model == MYCILA_JSY_MK_333) {
+      root["total_act_energy"] = prevData.phase(id).activeEnergy;
+      root["total_act_ret_energy"] = prevData.phase(id).activeEnergyReturned;
+    } else {
+      root["total_act_energy"] = prevData.channel(id).activeEnergy;
+      root["total_act_ret_energy"] = prevData.channel(id).activeEnergyReturned;
+    }
+    response->setLength();
+    request->send(response);
+  });
+  // API: /rpc/EM.GetStatus?id=0|1|2
+  // For: Shelly 3EM
+  // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EM/#emgetstatus-example
+  // Example:
+  // {
+  //   "id": 0,
+  //   "a_current": 4.029,
+  //   "a_voltage": 236.1,
+  //   "a_act_power": 951.2,
+  //   "a_aprt_power": 951.9,
+  //   "a_pf": 1,
+  //   "a_freq": 50,
+  //   "b_current": 4.027,
+  //   "b_voltage": 236.201,
+  //   "b_act_power": -951.1,
+  //   "b_aprt_power": 951.8,
+  //   "b_pf": 1,
+  //   "b_freq": 50,
+  //   "c_current": 3.03,
+  //   "c_voltage": 236.402,
+  //   "c_active_power": 715.4,
+  //   "c_aprt_power": 716.2,
+  //   "c_pf": 1,
+  //   "c_freq": 50,
+  //   "n_current": 11.029,
+  //   "total_current": 11.083,
+  //   "total_act_power": 2484.782,
+  //   "total_aprt_power": 2486.7,
+  //   "user_calibrated_phase": [],
+  //   "errors": [
+  //     "phase_sequence"
+  //   ]
+  // }
+  webServer.on("/rpc/EM.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (prevData.model != MYCILA_JSY_MK_333) {
+      request->send(404);
+      return;
+    }
+    int id = get_id_param(request);
+    if (id == -1) {
+      request->send(500);
+      return;
+    }
+    // model is JSY-MK-333 and id == 0, 1 or 2
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    root["id"] = id;
+    root["a_current"] = prevData.phaseA().current;
+    root["a_voltage"] = prevData.phaseA().voltage;
+    root["a_act_power"] = prevData.phaseA().activePower;
+    root["a_aprt_power"] = prevData.phaseA().apparentPower;
+    root["a_pf"] = prevData.phaseA().powerFactor;
+    root["a_freq"] = prevData.phaseA().frequency;
+    root["b_current"] = prevData.phaseB().current;
+    root["b_voltage"] = prevData.phaseB().voltage;
+    root["b_act_power"] = prevData.phaseB().activePower;
+    root["b_aprt_power"] = prevData.phaseB().apparentPower;
+    root["b_pf"] = prevData.phaseB().powerFactor;
+    root["b_freq"] = prevData.phaseB().frequency;
+    root["c_current"] = prevData.phaseC().current;
+    root["c_voltage"] = prevData.phaseC().voltage;
+    root["c_active_power"] = prevData.phaseC().activePower;
+    root["c_aprt_power"] = prevData.phaseC().apparentPower;
+    root["c_pf"] = prevData.phaseC().powerFactor;
+    root["c_freq"] = prevData.phaseC().frequency;
+    root["n_current"] = 0;
+    root["total_current"] = prevData.aggregate.current;
+    root["total_act_power"] = prevData.aggregate.activePower;
+    root["total_aprt_power"] = prevData.aggregate.apparentPower;
+    root["user_calibrated_phase"] = JsonArray();
+    root["errors"] = JsonArray();
+    response->setLength();
+    request->send(response);
+  });
+  // API: /rpc/EMData.GetStatus?id=0|1|2
+  // For: Shelly 3EM
+  // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EMData/#emdatagetstatus-example
+  // Example:
+  // {
+  //   "id": 0,
+  //   "a_total_act_energy": 0,
+  //   "a_total_act_ret_energy": 0,
+  //   "b_total_act_energy": 0,
+  //   "b_total_act_ret_energy": 0,
+  //   "c_total_act_energy": 0,
+  //   "c_total_act_ret_energy": 0,
+  //   "total_act": 0,
+  //   "total_act_ret": 0
+  // }
+  webServer.on("/rpc/EMData.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (prevData.model != MYCILA_JSY_MK_333) {
+      request->send(404);
+      return;
+    }
+    int id = get_id_param(request);
+    if (id == -1) {
+      request->send(500);
+      return;
+    }
+    // model is JSY-MK-333 and id == 0, 1 or 2
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    root["id"] = id;
+    root["a_total_act_energy"] = prevData.phaseA().activeEnergy;
+    root["a_total_act_ret_energy"] = prevData.phaseA().activeEnergyReturned;
+    root["b_total_act_energy"] = prevData.phaseB().activeEnergy;
+    root["b_total_act_ret_energy"] = prevData.phaseB().activeEnergyReturned;
+    root["c_total_act_energy"] = prevData.phaseC().activeEnergy;
+    root["c_total_act_ret_energy"] = prevData.phaseC().activeEnergyReturned;
+    root["total_act"] = prevData.aggregate.activeEnergy;
+    root["total_act_ret"] = prevData.aggregate.activeEnergyReturned;
+    response->setLength();
+    request->send(response);
+  });
 
   // Dashboard - Callbacks
   restart.onChange([](bool state) { restartTask.resume(); });
@@ -580,7 +809,7 @@ void setup() {
         break;
     }
   });
-  espConnect.begin(hostname.c_str(), ssid.c_str(), MYCILA_ADMIN_PASSWORD);
+  espConnect.begin(hostname.c_str(), hostname.c_str(), MYCILA_ADMIN_PASSWORD);
 
   // jsy
   jsy.setCallback([](const Mycila::JSY::EventType eventType, const Mycila::JSY::Data& data) {
