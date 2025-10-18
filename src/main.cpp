@@ -493,7 +493,8 @@ void setup() {
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
     root["switch"] = udpSendEnabled ? "on" : "off";
-    request->send(200);
+    response->setLength();
+    request->send(response);
   });
 
   // API: /api/jsy
