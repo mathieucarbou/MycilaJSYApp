@@ -1,110 +1,73 @@
-# MycilaJSYApp
+# Mycila JSY App ⚡️📡
 
-[![Latest Release](https://img.shields.io/github/release/mathieucarbou/MycilaJSYApp.svg)](https://GitHub.com/mathieucarbou/MycilaJSYApp/releases/)
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](code_of_conduct.md)
-
-[![Build](https://github.com/mathieucarbou/MycilaJSYApp/actions/workflows/ci.yml/badge.svg)](https://github.com/mathieucarbou/MycilaJSYApp/actions/workflows/ci.yml)
-[![GitHub latest commit](https://badgen.net/github/last-commit/mathieucarbou/MycilaJSYApp)](https://GitHub.com/mathieucarbou/MycilaJSYApp/commit/)
-[![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-Ready--to--Code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/mathieucarbou/MycilaJSYApp)
-
-Arduino / ESP32 Web Application for the JSY1031, JSY-MK-163, JSY-MK-193, JSY-MK-194, JSY-MK-227, JSY-MK-229, JSY-MK-333 families single-phase and three-phase AC bidirectional meters from Shenzhen Jiansiyan Technologies Co, Ltd. (https://www.jsypowermeter.com)
-
-- [Downloads](#downloads)
-- [Installation](#installation)
-  - [Firmware First Time Installation](#firmware-first-time-installation)
-  - [Firmware Update](#firmware-update)
-- [Wiring](#wiring)
-- [How to build your own version](#how-to-build-your-own-version)
-- [Usage](#usage)
-- [For developers](#for-developers)
-  - [Compilation with PlatformIO](#compilation-with-platformio)
-  - [Compilation with Arduino IDE](#compilation-with-arduino-ide)
-
-## Supported models
-
-- JSY-MK-163T
-- JSY-MK-194T
-- JSY-MK-194G
-- JSY-MK-333
-
-The JSY can be used connected to an ESP32 to send the JSY data several times per second to a remote server through UDP.
-Both devices needs to be connected to the same WiFi network and UDP packets must be allowed.
-
-Ethernet is also supported.
-
-Screenshot of the ESP32 running the JSY: the `MycilaJSY App`
+An Arduino / ESP32 web application for Shenzhen Jiansiyan (JSY) electricity meters (single-phase and three-phase). Mycila JSY App reads JSY series meters (JSY1031, JSY-MK-163, JSY-MK-193, JSY-MK-194, JSY-MK-227, JSY-MK-229, JSY-MK-333) and exposes a web dashboard, UDP broadcast stream, and a set of REST endpoints. It can also emulate Shelly EM and Shelly 3EM REST APIs so home automation platforms that speak Shelly devices can integrate with JSY meters.
 
 ![](https://github.com/mathieucarbou/MycilaJSY/assets/61346/3066bf12-31d5-45de-9303-d810f14731d0)
 
-The `Listener` is the same app but will display the data received through UDP.
-This examples shows you how to received the JSY statistics from the `MycilaJSY App` through UDP.
+[![Latest Release](https://img.shields.io/github/release/mathieucarbou/MycilaJSYApp.svg)](https://GitHub.com/mathieucarbou/MycilaJSYApp/releases/)
+[![GPLv3 license](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.txt)
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](code_of_conduct.md)
+[![Build](https://github.com/mathieucarbou/MycilaJSYApp/actions/workflows/ci.yml/badge.svg)](https://github.com/mathieucarbou/MycilaJSYApp/actions/workflows/ci.yml)
+[![GitHub latest commit](https://badgen.net/github/last-commit/mathieucarbou/MycilaJSYApp)](https://GitHub.com/mathieucarbou/MycilaJSYApp/commit/)
 
-**Speed**
+Table of contents
 
-The JSY Remote through UDP is nearly as fast as having the JSY wired to the ESP.
-All changes to the JSY are immediately sent through UDP to the listener at a rate of about **3 messages per second** as soon as the JSY registers are updated.
-Local JSY readings are made at a rate of 20-25 reads per second.
+- 📥 [Downloads](#downloads)
+- ⚙️ [Installation](#installation)
+- 🔌 [Wiring](#wiring)
+- 🧰 [Building](#how-to-build-your-own-version)
+- 👀 [Usage](#usage)
+- 📡 [REST API](#rest-api)
+- 🪄 [Shelly EM & 3EM emulation](#shelly-em-and-3em-emulation)
+- 🧩 [For developers](#for-developers)
 
-3 messages per sec is the rate at which the JSY usually updates its data.
+## Features
+
+- Reads JSY electricity meters over a serial interface (many JSY models supported).
+- Web dashboard (via ESPDash) with real-time graphs and statistics.
+- UDP broadcast of JSY data (binary MsgPack style payload) for listeners.
+- OTA firmware update support (ElegantOTA).
+- Emulates Shelly EM and Shelly 3EM REST APIs so 3rd-party integrations can treat the device as a Shelly energy meter.
+- Configurable pins / serial port via build flags.
+
+Important: this application can mimic Shelly EM and Shelly 3EM devices (Shelly Gen2 API) so it is easy to integrate into platforms expecting Shelly devices.
+
+## Supported JSY models
+
+- JSY-MK-163T
+- JSY-MK-194T / JSY-MK-193
+- JSY-MK-333
+- JSY1031 and other similar single-/two-/three-phase JSY models
 
 ## Downloads
 
-Please look at the release section to find the firmwares.
+Releases (firmware binaries) are available in the GitHub releases page:
 
-👉 Releases: [https://github.com/mathieucarbou/MycilaJSYApp/releases](https://github.com/mathieucarbou/MycilaJSYApp/releases)
+https://github.com/mathieucarbou/MycilaJSYApp/releases
 
-**Make sure to download the firmware matching your board.**
+Naming convention:
 
-Firmware files are named as follow:
-
-- `MycilaJSYApp-BOARD.OTA.bin`: This firmware is used to update through the Web OTA interface
-- `MycilaJSYApp-BOARD.FACTORY.bin`: This firmware is used for a first ESP installation, or wen doing a factory reset through USB flashing
+- `MycilaJSYApp-BOARD.FACTORY.bin` — first-time / factory flash image
+- `MycilaJSYApp-BOARD.OTA.bin` — OTA update image
 
 ## Installation
 
-### Firmware First Time Installation
-
-**The firmware file which must be used for a first installation is the one ending with `.FACTORY.bin`.**
-
-**With `esptool.py` (Linux / MacOS):**
-
-First erase the memory (including the user data):
+First-time flash (factory image):
 
 ```bash
 esptool.py erase_flash
-```
-
-The flash the complete `FACTORY` firmware file:
-
-```bash
 esptool.py write_flash 0x0 MycilaJSYApp-BOARD.FACTORY.bin
 ```
 
-**With [Espressif Flash Tool](https://www.espressif.com/en/support/download/other-tools) (Windows):**
+OTA update (upload via web UI):
 
-Be careful to not forget the `0`!
-
-![Espressif Flash Tool](https://yasolr.carbou.me/assets/img/screenshots/Espressif_Flash_Tool.png)
-
-### Firmware Update
-
-To update the firmware through OTA, please follow these steps:
-
-1. First [download the new firmware](download). The firmware file which must be used is the one ending with `.OTA.bin` (`MycilaJSYApp-BOARD.OTA.bin`)
-
-2. Go to the update page at `http://<device-ip>/update`
-
-3. Upload the new OTA firmware
-
-4. The device will reboot
+1. Download `MycilaJSYApp-BOARD.OTA.bin` from Releases
+2. Open http://<device-ip>/update and upload the OTA file
+3. Device reboots
 
 ## Wiring
 
-After the application is flashed, it will restart and you will see a log line in the Serial console telling you the RX and TX pins used for the JSY.
-
-The default GPIO are:
+After flashing the device the serial pins used for the JSY are printed to the Serial console during boot. The default board pin mappings are in the code and summarized below.
 
 | Board               | Serial2 RX (JSY TX) | Serial2 TX (JSY RX) |
 | :------------------ | :-----------------: | :-----------------: |
@@ -123,129 +86,111 @@ The default GPIO are:
 | wipy3               |          4          |         25          |
 | wt32-eth01          |          5          |         17          |
 
-**Electric wiring for JSY boards with 2 channels:**
+Electric wiring note for 2-channel JSY boards:
 
-- Channel 1 (CT1): anything
-- Channel 2 (CT2): the grid should go through it
-
-Reason is that on some JSY, channel 1 is a tore on the board while channel 2 is always a clamp.
-This is easier to put a clamp around the grid wire.
+- Channel 1 (CT1): any current conductor
+- Channel 2 (CT2): grid should pass through CT2 (clamp) on many JSY boards
 
 ## How to build your own version
 
-Run at the root of the project:
+Using PlatformIO (recommended):
 
 ```bash
 PIO_BOARD=esp32dev pio run -e ci
 ```
 
-And follow the instructions to flash the firmware shown at the end of the build.
-
-`esp32dev` can be replaced with any board type
-
-If you need to specify your own pin, or change the port, you can do:
+You can override the JSY serial mapping and UDP port using build flags, for example:
 
 ```bash
-# use default mapping in code
 PIO_BOARD=esp32dev PLATFORMIO_BUILD_SRC_FLAGS="-DMYCILA_JSY_SERIAL=Serial2 -DMYCILA_JSY_RX=RX2 -DMYCILA_JSY_TX=TX2 -DMYCILA_UDP_PORT=53964" pio run -e ci
-
-# use custom mapping in code
-PIO_BOARD=esp32dev PLATFORMIO_BUILD_SRC_FLAGS="-DMYCILA_JSY_SERIAL=Serial2 -DMYCILA_JSY_RX=4 -DMYCILA_JSY_TX=25 -DMYCILA_UDP_PORT=53964" pio run -e ci
 ```
 
 ## Usage
 
-Quick start is simple: the device will open an access point, you need to connect to it and choose the WiFI to join.
+- On first boot the device creates an access point to configure WiFi. Connect and select your network.
+- Dashboard: http://<device-ip>/dashboard (root `/` is rewritten to `/dashboard` in normal mode)
+- Console logs (web serial): http://<device-ip>/console
+- OTA update page: http://<device-ip>/update
 
-Once the device has joined the WiFi and is connected to a JSY, you will see the JSY data on the dashboard of this device, but also the data will flow on client-side: the client will receive the data each 500ms and graphs will be updated in real-time.
+The device also broadcasts JSY data via UDP on port 53964 by default (configurable).
 
-- To look at the logs, go to: `http://<device-ip>/console`
+## REST API — implemented endpoints
 
-![](https://github.com/mathieucarbou/MycilaJSY/assets/61346/a2604cfe-c31b-4c4d-bf00-764961aee756)
+The following HTTP endpoints are implemented in `src/main.cpp` (matching the Shelly Gen2 API for EM / 3EM where applicable). Use `http://<device-ip>` as base.
 
-- To update the firmware, go to: `http://<device-ip>/update`
+- GET /api/jsy
 
-![](https://github.com/mathieucarbou/MycilaJSY/assets/61346/8a4c03d8-5fd4-4580-ae46-a70dc5807327)
+  - Returns the raw JSY data in JSON format. (Implemented via `jsy.toJson()`)
 
-- Some statistics and device / network information are available:
+- GET|POST /api/jsy/reset
 
-![](https://github.com/mathieucarbou/MycilaJSY/assets/61346/1943a697-f108-4cdc-a886-98cb3748af24)
+  - Resets the JSY energy counters. Returns 200 on success or 409 if the reset cannot be performed.
 
-- An API is available at: `http://<device-ip>/api/jsy`
+- GET|POST /api/jsy/publish
 
-```json
-{
-  "enabled": true,
-  "address": 1,
-  "speed": 38400,
-  "model": 404,
-  "model_name": "JSY-MK-194",
-  "time": 116089,
-  "current1": 0,
-  "current2": 3.99,
-  "energy_returned1": 0,
-  "energy_returned2": 0,
-  "energy1": 0,
-  "energy2": 0.371,
-  "frequency": 49.98,
-  "power_factor1": 0,
-  "power_factor2": 0.719,
-  "power1": 0,
-  "power2": 666.8345,
-  "voltage1": 232.1408,
-  "voltage2": 232.1408
-}
-```
+  - With no query parameter: returns the UDP data publishing state as JSON { "switch": "on"|"off" }.
+  - With `?switch=on` or `?switch=off`: enables/disables UDP broadcasting and persists preference.
 
-## For developers
+- GET|POST /api/restart
 
-- You can add a password by changing the line `#define MYCILA_ADMIN_PASSWORD ""`
-- You can change the definitions for `MYCILA_JSY_RX`, `MYCILA_JSY_TX` and `MYCILA_JSY_SERIAL`
+  - Triggers a device restart. Returns 200 immediately.
 
-### Compilation with PlatformIO
+- GET|POST /api/reset
+  - Clears WiFi configuration (factory reset) and restarts the device. Returns 200.
 
-This is as simple as running:
+### Shelly EM & 3EM emulation
 
-```bash
-PIO_BOARD="<your-board>" pio run -e ci
-```
+The project exposes Shelly-compatible endpoints (Shelly Gen2 API style) so third-party platforms can treat the device as a Shelly EM or Shelly 3EM. The emulation endpoints implemented in `src/main.cpp` are:
 
-### Compilation with Arduino IDE
+- GET /rpc/Shelly.GetDeviceInfo
 
-_I am not familiar with Arduino IDE because this is not a correct IDE for development._
-_Please help contribute to this README if the explanation needs to be improved._
+  - Returns JSON with device name, id, mac, firmware version (`MYCILA_JSY_VERSION`) and `app` set to `EM` or `3EM` depending on the detected JSY model.
 
-You need to install these Arduino dependencies from the library manager or by downloading them:
+- GET /rpc/EM1.GetStatus?id=0|1|2
 
-```c++
-#include <ArduinoJson.h>          // https://github.com/bblanchon/ArduinoJson
-#include <AsyncTCP.h>             // https://github.com/ESP32Async/AsyncTCP
-#include <ESPAsyncWebServer.h>    // https://github.com/ESP32Async/ESPAsyncWebServer
-#include <ElegantOTA.h>           // https://github.com/ayushsharma82/ElegantOTA
-#include <ESPDash.h>              // https://github.com/ayushsharma82/ESP-DASH
-#include <FastCRC32.h>            // https://github.com/RobTillaart/CRC
-#include <MycilaCircularBuffer.h> // https://github.com/mathieucarbou/MycilaUtilities
-#include <MycilaESPConnect.h>     // https://github.com/mathieucarbou/MycilaESPConnect
-#include <MycilaJSYApp.h>            // https://github.com/mathieucarbou/MycilaJSYApp
-#include <MycilaLogger.h>         // https://github.com/mathieucarbou/MycilaLogger
-#include <MycilaSystem.h>         // https://github.com/mathieucarbou/MycilaSystem
-#include <MycilaTaskManager.h>    // https://github.com/mathieucarbou/MycilaTaskManager
-#include <MycilaTime.h>           // https://github.com/mathieucarbou/MycilaUtilities
-#include <MycilaWebSerial.h>      // https://github.com/mathieucarbou/MycilaWebSerial
-```
+  - Shelly EM / 3EM compatible status for a single channel/phase. Returns voltage, current, active/apparent power, power factor, frequency and calibration.
+  - For single-phase meters (JSY-MK-163 / JSY1031) `id` must be 0.
+  - For two-channel meters `id` must be 0 or 1.
+  - For three-phase (JSY-MK-333) `id` can be 0, 1 or 2 (phase A/B/C).
 
-The program also uses these Arduino libraries:
+- GET /rpc/EM1Data.GetStatus?id=0|1|2
 
-```
-DNSServer
-ESP32 Async UDP
-ESPmDNS
-FS
-Networking
-LittleFS
-WiFi
-Ticker
-Update
-```
+  - Returns total active energy and returned energy for the requested channel/phase.
 
-The compile and upload.
+- GET /rpc/EM.GetStatus?id=0|1|2
+
+  - Shelly 3EM full status (multi-phase) — implemented only when the detected model is a 3-phase meter (JSY-MK-333). Returns per-phase values plus totals.
+
+- GET /rpc/EMData.GetStatus?id=0|1|2
+  - Shelly 3EM energy totals per-phase and global totals — implemented only for JSY-MK-333.
+
+Notes about the Shelly endpoints:
+
+- The implementation mirrors the JSON fields used by Shelly Gen2 API as implemented in `src/main.cpp`.
+- If a Shelly endpoint is called but the underlying JSY model does not support the requested operation (for instance calling `/rpc/EM.GetStatus` on a non-3EM device), the server responds with an HTTP 404 or 500 as coded.
+
+## UDP broadcast format
+
+- By default the device broadcasts UDP packets on port 53964. The packet format includes a small header then a MsgPack-like payload and a CRC32. See `src/main.cpp` for serialization details. The UDP message type for JSY data is 0x02.
+
+## For developers / dependencies
+
+The project uses these libraries (examples shown in `src/main.cpp` includes):
+
+- ArduinoJson
+- AsyncTCP
+- ESPAsyncWebServer
+- ESPDash
+- ElegantOTA
+- FastCRC32
+- Mycila libraries (MycilaJSY, MycilaESPConnect, MycilaUtilities, etc.)
+
+Other Arduino libraries used (platform-provided): DNSServer, ESP32 Async UDP, ESPmDNS, FS, LittleFS, WiFi, Ticker, Update
+
+## Contributing
+
+Patches, issues and suggestions welcome. If you add a Shelly-compatibility improvement, please add test cases and document any behavior differences.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
