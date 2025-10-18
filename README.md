@@ -124,6 +124,31 @@ The following HTTP endpoints are implemented in `src/main.cpp` (matching the She
 
   - Returns the raw JSY data in JSON format. (Implemented via `jsy.toJson()`)
 
+```json
+{
+  "enabled": true,
+  "time": 2375713792,
+  "speed": 9600,
+  "address": 1,
+  "model": 355,
+  "model_name": "JSY-MK-163",
+  "frequency": 50.01,
+  "voltage": 236.01,
+  "current": 6.16,
+  "active_power": 1178,
+  "reactive_power": 852.8571,
+  "apparent_power": 1454.321,
+  "power_factor": 0.81,
+  "active_energy": 1433820,
+  "active_energy_imported": 1101090,
+  "active_energy_returned": 332730,
+  "resistance": 31.04444,
+  "dimmed_voltage": 191.2338,
+  "nominal_power": 1794.225,
+  "thdi_0": 72.39874
+}
+```
+
 - `GET|POST /api/jsy/reset`
 
   - Resets the JSY energy counters. Returns 200 on success or 409 if the reset cannot be performed.
@@ -148,6 +173,16 @@ The project exposes Shelly-compatible endpoints (Shelly Gen2 API style) so third
 
   - Returns JSON with device name, id, mac, firmware version (`MYCILA_JSY_VERSION`) and `app` set to `EM` or `3EM` depending on the detected JSY model.
 
+```json
+{
+  "name": "Mycila JSY App",
+  "id": "shellyproem50-40:22:D8:EA:C5:71",
+  "mac": "40:22:D8:EA:C5:71",
+  "ver": "15.3.8",
+  "app": "EM"
+}
+```
+
 - `GET /rpc/EM1.GetStatus?id=0|1|2`
 
   - Shelly EM / 3EM compatible status for a single channel/phase. Returns voltage, current, active/apparent power, power factor, frequency and calibration.
@@ -155,16 +190,77 @@ The project exposes Shelly-compatible endpoints (Shelly Gen2 API style) so third
   - For two-channel meters `id` must be 0 or 1.
   - For three-phase (JSY-MK-333) `id` can be 0, 1 or 2 (phase A/B/C).
 
+```json
+{
+  "id": 0,
+  "voltage": 240.2,
+  "current": 6.473,
+  "act_power": 1327.6,
+  "aprt_power": 1557.6,
+  "pf": 0.87,
+  "freq": 50,
+  "calibration": "factory"
+}
+```
+
 - `GET /rpc/EM1Data.GetStatus?id=0|1|2`
 
   - Returns total active energy and returned energy for the requested channel/phase.
+
+```json
+{ "id": 0, "total_act_energy": 2776175.11, "total_act_ret_energy": 571584.87 }
+```
 
 - `GET /rpc/EM.GetStatus?id=0|1|2`
 
   - Shelly 3EM full status (multi-phase) — implemented only when the detected model is a 3-phase meter (JSY-MK-333). Returns per-phase values plus totals.
 
+```json
+{
+  "id": 0,
+  "a_current": 4.029,
+  "a_voltage": 236.1,
+  "a_act_power": 951.2,
+  "a_aprt_power": 951.9,
+  "a_pf": 1,
+  "a_freq": 50,
+  "b_current": 4.027,
+  "b_voltage": 236.201,
+  "b_act_power": -951.1,
+  "b_aprt_power": 951.8,
+  "b_pf": 1,
+  "b_freq": 50,
+  "c_current": 3.03,
+  "c_voltage": 236.402,
+  "c_active_power": 715.4,
+  "c_aprt_power": 716.2,
+  "c_pf": 1,
+  "c_freq": 50,
+  "n_current": 11.029,
+  "total_current": 11.083,
+  "total_act_power": 2484.782,
+  "total_aprt_power": 2486.7,
+  "user_calibrated_phase": [],
+  "errors": ["phase_sequence"]
+}
+```
+
 - `GET /rpc/EMData.GetStatus?id=0|1|2`
   - Shelly 3EM energy totals per-phase and global totals — implemented only for JSY-MK-333.
+
+```json
+{
+  "id": 0,
+  "a_total_act_energy": 0,
+  "a_total_act_ret_energy": 0,
+  "b_total_act_energy": 0,
+  "b_total_act_ret_energy": 0,
+  "c_total_act_energy": 0,
+  "c_total_act_ret_energy": 0,
+  "total_act": 0,
+  "total_act_ret": 0
+}
+```
 
 Notes about the Shelly endpoints:
 
