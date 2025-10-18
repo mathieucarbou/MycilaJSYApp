@@ -80,7 +80,7 @@ static dash::StatisticValue networkWiFiSSID(dashboard, "Network WiFi SSID");
 static dash::StatisticValue networkWiFiRSSI(dashboard, "Network WiFi RSSI");
 static dash::StatisticValue networkWiFiSignal(dashboard, "Network WiFi Signal");
 static dash::StatisticValue uptime(dashboard, "Uptime");
-static dash::StatisticValue version(dashboard, "Version");
+static dash::StatisticValue version(dashboard, "MycilaJSY Version");
 
 static dash::ToggleButtonCard publishDataCard(dashboard, "Publish Data");
 static dash::ToggleButtonCard restart(dashboard, "Restart");
