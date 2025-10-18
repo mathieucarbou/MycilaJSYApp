@@ -45,7 +45,7 @@ Important: this application can mimic Shelly EM and Shelly 3EM devices (Shelly G
 
 Releases (firmware binaries) are available in the GitHub releases page:
 
-https://github.com/mathieucarbou/MycilaJSYApp/releases
+[https://github.com/mathieucarbou/MycilaJSYApp/releases](https://github.com/mathieucarbou/MycilaJSYApp/releases)
 
 Naming convention:
 
