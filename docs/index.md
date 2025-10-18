@@ -120,50 +120,50 @@ The device also broadcasts JSY data via UDP on port 53964 by default (configurab
 
 The following HTTP endpoints are implemented in `src/main.cpp` (matching the Shelly Gen2 API for EM / 3EM where applicable). Use `http://<device-ip>` as base.
 
-- GET /api/jsy
+- `GET /api/jsy`
 
   - Returns the raw JSY data in JSON format. (Implemented via `jsy.toJson()`)
 
-- GET|POST /api/jsy/reset
+- `GET|POST /api/jsy/reset`
 
   - Resets the JSY energy counters. Returns 200 on success or 409 if the reset cannot be performed.
 
-- GET|POST /api/jsy/publish
+- `GET|POST /api/jsy/publish`
 
   - With no query parameter: returns the UDP data publishing state as JSON { "switch": "on"|"off" }.
   - With `?switch=on` or `?switch=off`: enables/disables UDP broadcasting and persists preference.
 
-- GET|POST /api/restart
+- `GET|POST /api/restart`
 
   - Triggers a device restart. Returns 200 immediately.
 
-- GET|POST /api/reset
+- `GET|POST /api/reset`
   - Clears WiFi configuration (factory reset) and restarts the device. Returns 200.
 
 ### Shelly EM & 3EM emulation
 
 The project exposes Shelly-compatible endpoints (Shelly Gen2 API style) so third-party platforms can treat the device as a Shelly EM or Shelly 3EM. The emulation endpoints implemented in `src/main.cpp` are:
 
-- GET /rpc/Shelly.GetDeviceInfo
+- `GET /rpc/Shelly.GetDeviceInfo`
 
   - Returns JSON with device name, id, mac, firmware version (`MYCILA_JSY_VERSION`) and `app` set to `EM` or `3EM` depending on the detected JSY model.
 
-- GET /rpc/EM1.GetStatus?id=0|1|2
+- `GET /rpc/EM1.GetStatus?id=0|1|2`
 
   - Shelly EM / 3EM compatible status for a single channel/phase. Returns voltage, current, active/apparent power, power factor, frequency and calibration.
   - For single-phase meters (JSY-MK-163 / JSY1031) `id` must be 0.
   - For two-channel meters `id` must be 0 or 1.
   - For three-phase (JSY-MK-333) `id` can be 0, 1 or 2 (phase A/B/C).
 
-- GET /rpc/EM1Data.GetStatus?id=0|1|2
+- `GET /rpc/EM1Data.GetStatus?id=0|1|2`
 
   - Returns total active energy and returned energy for the requested channel/phase.
 
-- GET /rpc/EM.GetStatus?id=0|1|2
+- `GET /rpc/EM.GetStatus?id=0|1|2`
 
   - Shelly 3EM full status (multi-phase) — implemented only when the detected model is a 3-phase meter (JSY-MK-333). Returns per-phase values plus totals.
 
-- GET /rpc/EMData.GetStatus?id=0|1|2
+- `GET /rpc/EMData.GetStatus?id=0|1|2`
   - Shelly 3EM energy totals per-phase and global totals — implemented only for JSY-MK-333.
 
 Notes about the Shelly endpoints:
