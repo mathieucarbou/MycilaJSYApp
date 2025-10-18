@@ -517,6 +517,20 @@ void setup() {
     restartTask.resume();
     request->send(200);
   });
+  // API: /api
+  // Returns the list of available API endpoints
+  webServer.on("/api", HTTP_GET, [](AsyncWebServerRequest* request) {
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    root["/api/jsy/reset"] = "Resets the energy counters";
+    root["/api/jsy/publish?switch=on"] = "Enables UDP data publishing";
+    root["/api/jsy/publish?switch=off"] = "Disables UDP data publishing";
+    root["/api/jsy"] = "Returns the current JSY data";
+    root["/api/restart"] = "Restarts the device";
+    root["/api/reset"] = "Resets the device to factory defaults";
+    response->setLength();
+    request->send(response);
+  });
 
   // API Routes to fake Shelly EM and 3EM
 
@@ -710,6 +724,38 @@ void setup() {
     root["c_total_act_ret_energy"] = prevData.phaseC().activeEnergyReturned;
     root["total_act"] = prevData.aggregate.activeEnergy;
     root["total_act_ret"] = prevData.aggregate.activeEnergyReturned;
+    response->setLength();
+    request->send(response);
+  });
+  // API: /rpc
+  // For: Shelly EM & 3EM
+  // Returns the list of available API endpoints
+  webServer.on("/rpc", HTTP_GET, [](AsyncWebServerRequest* request) {
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    root["/rpc/Shelly.GetDeviceInfo"] = "Returns the device information";
+    if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
+      root["/rpc/EM1.GetStatus?id=0"] = "Returns the current EM1 status";
+      root["/rpc/EM1Data.GetStatus?id=0"] = "Returns the current EM1 data status";
+    } else if (prevData.model == MYCILA_JSY_MK_333) {
+      root["/rpc/EM1.GetStatus?id=0"] = "Returns the current EM1 status for phase A";
+      root["/rpc/EM1.GetStatus?id=1"] = "Returns the current EM1 status for phase B";
+      root["/rpc/EM1.GetStatus?id=2"] = "Returns the current EM1 status for phase C";
+      root["/rpc/EM1Data.GetStatus?id=0"] = "Returns the current EM1 data status for phase A";
+      root["/rpc/EM1Data.GetStatus?id=1"] = "Returns the current EM1 data status for phase B";
+      root["/rpc/EM1Data.GetStatus?id=2"] = "Returns the current EM1 data status for phase C";
+      root["/rpc/EM.GetStatus?id=0"] = "Returns the current EM status for all phases";
+      root["/rpc/EM.GetStatus?id=1"] = "Returns the current EM status for all phases";
+      root["/rpc/EM.GetStatus?id=2"] = "Returns the current EM status for all phases";
+      root["/rpc/EMData.GetStatus?id=0"] = "Returns the current EM data status for all phases";
+      root["/rpc/EMData.GetStatus?id=1"] = "Returns the current EM data status for all phases";
+      root["/rpc/EMData.GetStatus?id=2"] = "Returns the current EM data status for all phases";
+    } else {
+      root["/rpc/EM1.GetStatus?id=0"] = "Returns the current EM1 status for channel 1";
+      root["/rpc/EM1.GetStatus?id=1"] = "Returns the current EM1 status for channel 2";
+      root["/rpc/EM1Data.GetStatus?id=0"] = "Returns the current EM1 data status for channel 1";
+      root["/rpc/EM1Data.GetStatus?id=1"] = "Returns the current EM1 data status for channel 2";
+    }
     response->setLength();
     request->send(response);
   });

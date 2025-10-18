@@ -1,6 +1,8 @@
 # Mycila JSY App ⚡️📡
 
-An Arduino / ESP32 web application for Shenzhen Jiansiyan (JSY) electricity meters (single-phase and three-phase). Mycila JSY App reads JSY series meters (JSY1031, JSY-MK-163, JSY-MK-193, JSY-MK-194, JSY-MK-227, JSY-MK-229, JSY-MK-333) and exposes a web dashboard, UDP broadcast stream, and a set of REST endpoints. It can also emulate Shelly EM and Shelly 3EM REST APIs so home automation platforms that speak Shelly devices can integrate with JSY meters.
+An Arduino / ESP32 web application for Shenzhen Jiansiyan (JSY) electricity meters (single-phase and three-phase).
+Mycila JSY App reads JSY series meters (JSY1031, JSY-MK-163, JSY-MK-193, JSY-MK-194, JSY-MK-227, JSY-MK-229, JSY-MK-333 from [https://www.jsypowermeter.com](https://www.jsypowermeter.com)) and exposes a web dashboard, UDP broadcast stream, and a set of REST endpoints.
+It can also emulate Shelly EM and Shelly 3EM REST APIs so home automation platforms that speak Shelly devices can integrate with JSY meters.
 
 ![](https://github.com/mathieucarbou/MycilaJSY/assets/61346/3066bf12-31d5-45de-9303-d810f14731d0)
 
