@@ -79,101 +79,117 @@ static dash::StatisticValue networkWiFiMAC(dashboard, "Network WiFi MAC Address"
 static dash::StatisticValue networkWiFiSSID(dashboard, "Network WiFi SSID");
 static dash::StatisticValue networkWiFiRSSI(dashboard, "Network WiFi RSSI");
 static dash::StatisticValue networkWiFiSignal(dashboard, "Network WiFi Signal");
+static dash::StatisticValue<float, 2> messageRateCard(dashboard, "UDP Message Rate (msg/s)");
+static dash::StatisticValue<uint32_t> dataRateCard(dashboard, "UDP Data Rate (bytes/s)");
 static dash::StatisticValue uptime(dashboard, "Uptime");
 static dash::StatisticValue version(dashboard, "MycilaJSY Version");
 
-static dash::ToggleButtonCard publishDataCard(dashboard, "Publish Data");
+static dash::SeparatorCard sep1(dashboard, "Controls");
+static dash::GenericCard jsyModelCard(dashboard, "Model");
 static dash::ToggleButtonCard restart(dashboard, "Restart");
 static dash::ToggleButtonCard energyReset(dashboard, "Reset Energy");
 static dash::ToggleButtonCard reset(dashboard, "Factory Reset");
 
-static dash::GenericCard jsyModelCard(dashboard, "Model");
-static dash::GenericCard<float, 2> messageRateCard(dashboard, "Message Rate", "msg/s");
-static dash::GenericCard<uint32_t> dataRateCard(dashboard, "Data Rate", "bytes/s");
-
 // JSY-MK-163
+static dash::SeparatorCard jsy163Data(dashboard, "Data");
+static dash::ToggleButtonCard jsy163Publish(dashboard, "UDP Publish");
 static dash::GenericCard<float, 1> jsy163Frequency(dashboard, "Frequency", "Hz");
 static dash::GenericCard<float, 1> jsy163Voltage(dashboard, "Voltage", "V");
 static dash::GenericCard<float, 2> jsy163current(dashboard, "Current", "A");
-static dash::GenericCard<float, 2> jsy163PowerFactor(dashboard, "P Factor");
-static dash::GenericCard<float, 0> jsy163ActivePower(dashboard, "Active P", "W");
-static dash::GenericCard<float, 0> jsy163ApparentPower(dashboard, "Apparent P", "VA");
-static dash::GenericCard<float, 0> jsy163ReactivePower(dashboard, "Reactive P", "VAr");
-static dash::GenericCard<uint32_t> jsy163ActiveEnergy(dashboard, "Active E", "Wh");
-static dash::GenericCard<uint32_t> jsy163ActiveEnergyImported(dashboard, "Active E Import", "Wh");
-static dash::GenericCard<uint32_t> jsy163ActiveEnergyReturned(dashboard, "Active E Return", "Wh");
+static dash::GenericCard<float, 2> jsy163PowerFactor(dashboard, "Power Factor");
+static dash::GenericCard<float, 0> jsy163ActivePower(dashboard, "Active Power", "W");
+static dash::GenericCard<float, 0> jsy163ApparentPower(dashboard, "Apparent Power", "VA");
+static dash::GenericCard<float, 0> jsy163ReactivePower(dashboard, "Reactive Power", "VAr");
+static dash::GenericCard<uint32_t> jsy163ActiveEnergy(dashboard, "Active Energy", "Wh");
+static dash::GenericCard<uint32_t> jsy163ActiveEnergyImported(dashboard, "Active E. Imported", "Wh");
+static dash::GenericCard<uint32_t> jsy163ActiveEnergyReturned(dashboard, "Active E. Returned", "Wh");
 static dash::BarChart<int8_t, int16_t> jsy163ActivePowerHistory(dashboard, "Active Power (W)");
 
-// JSY-MK-194
-static dash::GenericCard<float, 1> jsy194Channel1Frequency(dashboard, "Frequency 1", "Hz");
-static dash::GenericCard<float, 1> jsy194Channel1Voltage(dashboard, "Voltage 1", "V");
-static dash::GenericCard<float, 2> jsy194Channel1Current(dashboard, "Current 1", "A");
-static dash::GenericCard<float, 2> jsy194Channel1PowerFactor(dashboard, "P Factor 1");
-static dash::GenericCard<float, 0> jsy194Channel1ActivePower(dashboard, "Active P 1", "W");
-static dash::GenericCard<float, 0> jsy194Channel1ApparentPower(dashboard, "Apparent P 1", "VA");
-static dash::GenericCard<float, 0> jsy194Channel1ReactivePower(dashboard, "Reactive P 1", "VAr");
-static dash::GenericCard<uint32_t> jsy194Channel1ActiveEnergy(dashboard, "Active E 1", "Wh");
-static dash::GenericCard<uint32_t> jsy194Channel1ActiveEnergyImported(dashboard, "Active E Import 1", "Wh");
-static dash::GenericCard<uint32_t> jsy194Channel1ActiveEnergyReturned(dashboard, "Active E Return 1", "Wh");
-static dash::GenericCard<float, 1> jsy194Channel2Frequency(dashboard, "Frequency 2", "Hz");
-static dash::GenericCard<float, 1> jsy194Channel2Voltage(dashboard, "Voltage 2", "V");
-static dash::GenericCard<float, 2> jsy194Channel2Current(dashboard, "Current 2", "A");
-static dash::GenericCard<float, 2> jsy194Channel2PowerFactor(dashboard, "P Factor 2");
-static dash::GenericCard<float, 0> jsy194Channel2ActivePower(dashboard, "Active P 2", "W");
-static dash::GenericCard<float, 0> jsy194Channel2ApparentPower(dashboard, "Apparent P 2", "VA");
-static dash::GenericCard<float, 0> jsy194Channel2ReactivePower(dashboard, "Reactive P 2", "VAr");
-static dash::GenericCard<uint32_t> jsy194Channel2ActiveEnergy(dashboard, "Active E 2", "Wh");
-static dash::GenericCard<uint32_t> jsy194Channel2ActiveEnergyImported(dashboard, "Active E Import 2", "Wh");
-static dash::GenericCard<uint32_t> jsy194Channel2ActiveEnergyReturned(dashboard, "Active E Return 2", "Wh");
-static dash::BarChart<int8_t, int16_t> jsy194Channel1ActivePowerHistory(dashboard, "Active P 1 (W)");
-static dash::BarChart<int8_t, int16_t> jsy194Channel2ActivePowerHistory(dashboard, "Active P 2 (W)");
+// JSY-MK-193, JSY-MK-194
+static dash::SeparatorCard jsy194Shelly(dashboard, "Shelly Emulation");
+static dash::SliderCard<uint8_t> jsy194ShellyIDChan1(dashboard, "Chan. 1 Shelly ID", 0, 1, 1);
+static dash::SliderCard<uint8_t> jsy194ShellyIDChan2(dashboard, "Chan. 2 Shelly ID", 0, 1, 1);
+static dash::SeparatorCard jsy194Data1(dashboard, "Channel 1");
+static dash::ToggleButtonCard jsy194Publish1(dashboard, "UDP Publish");
+static dash::GenericCard<float, 1> jsy194Channel1Frequency(dashboard, "Frequency", "Hz");
+static dash::GenericCard<float, 1> jsy194Channel1Voltage(dashboard, "Voltage", "V");
+static dash::GenericCard<float, 2> jsy194Channel1Current(dashboard, "Current", "A");
+static dash::GenericCard<float, 2> jsy194Channel1PowerFactor(dashboard, "Power Factor");
+static dash::GenericCard<float, 0> jsy194Channel1ActivePower(dashboard, "Active Power", "W");
+static dash::GenericCard<float, 0> jsy194Channel1ApparentPower(dashboard, "Apparent Power", "VA");
+static dash::GenericCard<float, 0> jsy194Channel1ReactivePower(dashboard, "Reactive Power", "VAr");
+static dash::GenericCard<uint32_t> jsy194Channel1ActiveEnergy(dashboard, "Active Energy", "Wh");
+static dash::GenericCard<uint32_t> jsy194Channel1ActiveEnergyImported(dashboard, "Active E. Imported", "Wh");
+static dash::GenericCard<uint32_t> jsy194Channel1ActiveEnergyReturned(dashboard, "Active E. Returned", "Wh");
+static dash::SeparatorCard jsy194Data2(dashboard, "Channel 2");
+static dash::ToggleButtonCard jsy194Publish2(dashboard, "UDP Publish");
+static dash::GenericCard<float, 1> jsy194Channel2Frequency(dashboard, "Frequency", "Hz");
+static dash::GenericCard<float, 1> jsy194Channel2Voltage(dashboard, "Voltage", "V");
+static dash::GenericCard<float, 2> jsy194Channel2Current(dashboard, "Current", "A");
+static dash::GenericCard<float, 2> jsy194Channel2PowerFactor(dashboard, "Power Factor");
+static dash::GenericCard<float, 0> jsy194Channel2ActivePower(dashboard, "Active Power", "W");
+static dash::GenericCard<float, 0> jsy194Channel2ApparentPower(dashboard, "Apparent Power", "VA");
+static dash::GenericCard<float, 0> jsy194Channel2ReactivePower(dashboard, "Reactive Power", "VAr");
+static dash::GenericCard<uint32_t> jsy194Channel2ActiveEnergy(dashboard, "Active Energy", "Wh");
+static dash::GenericCard<uint32_t> jsy194Channel2ActiveEnergyImported(dashboard, "Active E. Imported", "Wh");
+static dash::GenericCard<uint32_t> jsy194Channel2ActiveEnergyReturned(dashboard, "Active E. Returned", "Wh");
+static dash::SeparatorCard jsy194Charts(dashboard, "History Charts");
+static dash::BarChart<int8_t, int16_t> jsy194Channel1ActivePowerHistory(dashboard, "Active Power Channel 1 (W)");
+static dash::BarChart<int8_t, int16_t> jsy194Channel2ActivePowerHistory(dashboard, "Active Power Channel 2 (W)");
 
 // JSY-MK-333
-static dash::GenericCard<float, 1> jsy333PhaseAFrequency(dashboard, "Frequency A", "Hz");
-static dash::GenericCard<float, 1> jsy333PhaseAVoltage(dashboard, "Voltage A", "V");
-static dash::GenericCard<float, 2> jsy333PhaseACurrent(dashboard, "Current A", "A");
-static dash::GenericCard<float, 2> jsy333PhaseAPowerFactor(dashboard, "P Factor A");
-static dash::GenericCard<float, 0> jsy333PhaseAActivePower(dashboard, "Active Power A", "W");
-static dash::GenericCard<float, 0> jsy333PhaseAApparentPower(dashboard, "Apparent P A", "VA");
-static dash::GenericCard<float, 0> jsy333PhaseAReactivePower(dashboard, "Reactive P A", "VAr");
-static dash::GenericCard<uint32_t> jsy333PhaseAActiveEnergy(dashboard, "Active E A", "Wh");
-static dash::GenericCard<uint32_t> jsy333PhaseAActiveEnergyImported(dashboard, "Active E Import A", "Wh");
-static dash::GenericCard<uint32_t> jsy333PhaseAActiveEnergyReturned(dashboard, "Active E Return A", "Wh");
-static dash::GenericCard<uint32_t> jsy333PhaseAReactiveEnergy(dashboard, "Reactive E A", "VArh");
-static dash::GenericCard<uint32_t> jsy333PhaseAReactiveEnergyImported(dashboard, "Reactive E Import A", "VArh");
-static dash::GenericCard<uint32_t> jsy333PhaseAReactiveEnergyReturned(dashboard, "Reactive E Return A", "VArh");
-static dash::GenericCard<uint32_t> jsy333PhaseAApparentEnergy(dashboard, "Apparent E A", "VAh");
-static dash::GenericCard<float, 1> jsy333PhaseBFrequency(dashboard, "Frequency B", "Hz");
-static dash::GenericCard<float, 1> jsy333PhaseBVoltage(dashboard, "Voltage B", "V");
-static dash::GenericCard<float, 2> jsy333PhaseBCurrent(dashboard, "Current B", "A");
-static dash::GenericCard<float, 2> jsy333PhaseBPowerFactor(dashboard, "P Factor B");
-static dash::GenericCard<float, 0> jsy333PhaseBActivePower(dashboard, "Active P B", "W");
-static dash::GenericCard<float, 0> jsy333PhaseBApparentPower(dashboard, "Apparent P B", "VA");
-static dash::GenericCard<float, 0> jsy333PhaseBReactivePower(dashboard, "Reactive P B", "VAr");
-static dash::GenericCard<uint32_t> jsy333PhaseBActiveEnergy(dashboard, "Active E B", "Wh");
-static dash::GenericCard<uint32_t> jsy333PhaseBActiveEnergyImported(dashboard, "Active E Import B", "Wh");
-static dash::GenericCard<uint32_t> jsy333PhaseBActiveEnergyReturned(dashboard, "Active E Return B", "Wh");
-static dash::GenericCard<uint32_t> jsy333PhaseBReactiveEnergy(dashboard, "Reactive E B", "VArh");
-static dash::GenericCard<uint32_t> jsy333PhaseBReactiveEnergyImported(dashboard, "Reactive E Import B", "VArh");
-static dash::GenericCard<uint32_t> jsy333PhaseBReactiveEnergyReturned(dashboard, "Reactive E Return B", "VArh");
-static dash::GenericCard<uint32_t> jsy333PhaseBApparentEnergy(dashboard, "Apparent E B", "VAh");
-static dash::GenericCard<float, 1> jsy333PhaseCFrequency(dashboard, "Frequency C", "Hz");
-static dash::GenericCard<float, 1> jsy333PhaseCVoltage(dashboard, "Voltage C", "V");
-static dash::GenericCard<float, 2> jsy333PhaseCCurrent(dashboard, "Current C", "A");
-static dash::GenericCard<float, 2> jsy333PhaseCPowerFactor(dashboard, "P Factor C");
-static dash::GenericCard<float, 0> jsy333PhaseCActivePower(dashboard, "Active P C", "W");
-static dash::GenericCard<float, 0> jsy333PhaseCApparentPower(dashboard, "Apparent P C", "VA");
-static dash::GenericCard<float, 0> jsy333PhaseCReactivePower(dashboard, "Reactive P C", "VAr");
-static dash::GenericCard<uint32_t> jsy333PhaseCActiveEnergy(dashboard, "Active E C", "Wh");
-static dash::GenericCard<uint32_t> jsy333PhaseCActiveEnergyImported(dashboard, "Active E Import C", "Wh");
-static dash::GenericCard<uint32_t> jsy333PhaseCActiveEnergyReturned(dashboard, "Active E Return C", "Wh");
-static dash::GenericCard<uint32_t> jsy333PhaseCReactiveEnergy(dashboard, "Reactive E C", "VArh");
-static dash::GenericCard<uint32_t> jsy333PhaseCReactiveEnergyImported(dashboard, "Reactive E Import C", "VArh");
-static dash::GenericCard<uint32_t> jsy333PhaseCReactiveEnergyReturned(dashboard, "Reactive E Return C", "VArh");
-static dash::GenericCard<uint32_t> jsy333PhaseCApparentEnergy(dashboard, "Apparent E C", "VAh");
-static dash::BarChart<int8_t, int16_t> jsy333PhaseAActivePowerHistory(dashboard, "Active P A (W)");
-static dash::BarChart<int8_t, int16_t> jsy333PhaseBActivePowerHistory(dashboard, "Active P B (W)");
-static dash::BarChart<int8_t, int16_t> jsy333PhaseCActivePowerHistory(dashboard, "Active P C (W)");
+static dash::SeparatorCard jsy333DataA(dashboard, "Phase A");
+static dash::ToggleButtonCard jsy333PublishA(dashboard, "UDP Publish");
+static dash::GenericCard<float, 1> jsy333PhaseAFrequency(dashboard, "Frequency", "Hz");
+static dash::GenericCard<float, 1> jsy333PhaseAVoltage(dashboard, "Voltage", "V");
+static dash::GenericCard<float, 2> jsy333PhaseACurrent(dashboard, "Current", "A");
+static dash::GenericCard<float, 2> jsy333PhaseAPowerFactor(dashboard, "Power Factor");
+static dash::GenericCard<float, 0> jsy333PhaseAActivePower(dashboard, "Active Power", "W");
+static dash::GenericCard<float, 0> jsy333PhaseAApparentPower(dashboard, "Apparent Power", "VA");
+static dash::GenericCard<float, 0> jsy333PhaseAReactivePower(dashboard, "Reactive Power", "VAr");
+static dash::GenericCard<uint32_t> jsy333PhaseAActiveEnergy(dashboard, "Active Energy", "Wh");
+static dash::GenericCard<uint32_t> jsy333PhaseAActiveEnergyImported(dashboard, "Active Energy Import", "Wh");
+static dash::GenericCard<uint32_t> jsy333PhaseAActiveEnergyReturned(dashboard, "Active Energy Return", "Wh");
+static dash::GenericCard<uint32_t> jsy333PhaseAReactiveEnergy(dashboard, "Reactive Energy", "VArh");
+static dash::GenericCard<uint32_t> jsy333PhaseAReactiveEnergyImported(dashboard, "Reactive Energy Import", "VArh");
+static dash::GenericCard<uint32_t> jsy333PhaseAReactiveEnergyReturned(dashboard, "Reactive Energy Return", "VArh");
+static dash::GenericCard<uint32_t> jsy333PhaseAApparentEnergy(dashboard, "Apparent Energy", "VAh");
+static dash::SeparatorCard jsy333DataB(dashboard, "Phase B");
+static dash::ToggleButtonCard jsy333PublishB(dashboard, "UDP Publish");
+static dash::GenericCard<float, 1> jsy333PhaseBFrequency(dashboard, "Frequency", "Hz");
+static dash::GenericCard<float, 1> jsy333PhaseBVoltage(dashboard, "Voltage", "V");
+static dash::GenericCard<float, 2> jsy333PhaseBCurrent(dashboard, "Current", "A");
+static dash::GenericCard<float, 2> jsy333PhaseBPowerFactor(dashboard, "Power Factor");
+static dash::GenericCard<float, 0> jsy333PhaseBActivePower(dashboard, "Active Power", "W");
+static dash::GenericCard<float, 0> jsy333PhaseBApparentPower(dashboard, "Apparent Power", "VA");
+static dash::GenericCard<float, 0> jsy333PhaseBReactivePower(dashboard, "Reactive Power", "VAr");
+static dash::GenericCard<uint32_t> jsy333PhaseBActiveEnergy(dashboard, "Active Energy", "Wh");
+static dash::GenericCard<uint32_t> jsy333PhaseBActiveEnergyImported(dashboard, "Active E. Imported", "Wh");
+static dash::GenericCard<uint32_t> jsy333PhaseBActiveEnergyReturned(dashboard, "Active E. Returned", "Wh");
+static dash::GenericCard<uint32_t> jsy333PhaseBReactiveEnergy(dashboard, "Reactive Energy", "VArh");
+static dash::GenericCard<uint32_t> jsy333PhaseBReactiveEnergyImported(dashboard, "Reactive E. Imported", "VArh");
+static dash::GenericCard<uint32_t> jsy333PhaseBReactiveEnergyReturned(dashboard, "Reactive E. Returned", "VArh");
+static dash::GenericCard<uint32_t> jsy333PhaseBApparentEnergy(dashboard, "Apparent Energy", "VAh");
+static dash::SeparatorCard jsy333DataC(dashboard, "Phase C");
+static dash::ToggleButtonCard jsy333PublishC(dashboard, "UDP Publish");
+static dash::GenericCard<float, 1> jsy333PhaseCFrequency(dashboard, "Frequency", "Hz");
+static dash::GenericCard<float, 1> jsy333PhaseCVoltage(dashboard, "Voltage", "V");
+static dash::GenericCard<float, 2> jsy333PhaseCCurrent(dashboard, "Current", "A");
+static dash::GenericCard<float, 2> jsy333PhaseCPowerFactor(dashboard, "Power Factor");
+static dash::GenericCard<float, 0> jsy333PhaseCActivePower(dashboard, "Active Power", "W");
+static dash::GenericCard<float, 0> jsy333PhaseCApparentPower(dashboard, "Apparent Power", "VA");
+static dash::GenericCard<float, 0> jsy333PhaseCReactivePower(dashboard, "Reactive Power", "VAr");
+static dash::GenericCard<uint32_t> jsy333PhaseCActiveEnergy(dashboard, "Active Energy", "Wh");
+static dash::GenericCard<uint32_t> jsy333PhaseCActiveEnergyImported(dashboard, "Active E. Imported", "Wh");
+static dash::GenericCard<uint32_t> jsy333PhaseCActiveEnergyReturned(dashboard, "Active E. Returned", "Wh");
+static dash::GenericCard<uint32_t> jsy333PhaseCReactiveEnergy(dashboard, "Reactive Energy", "VArh");
+static dash::GenericCard<uint32_t> jsy333PhaseCReactiveEnergyImported(dashboard, "Reactive E. Imported", "VArh");
+static dash::GenericCard<uint32_t> jsy333PhaseCReactiveEnergyReturned(dashboard, "Reactive E. Returned", "VArh");
+static dash::GenericCard<uint32_t> jsy333PhaseCApparentEnergy(dashboard, "Apparent Energy", "VAh");
+static dash::SeparatorCard jsy333Charts(dashboard, "History Charts");
+static dash::BarChart<int8_t, int16_t> jsy333PhaseAActivePowerHistory(dashboard, "Active Power Phase A (W)");
+static dash::BarChart<int8_t, int16_t> jsy333PhaseBActivePowerHistory(dashboard, "Active Power Phase B (W)");
+static dash::BarChart<int8_t, int16_t> jsy333PhaseCActivePowerHistory(dashboard, "Active Power Phase C (W)");
 
 // graphs
 static int8_t historyX[MYCILA_GRAPH_POINTS] = {0};
@@ -181,7 +197,13 @@ static int16_t power1HistoryY[MYCILA_GRAPH_POINTS] = {0};
 static int16_t power2HistoryY[MYCILA_GRAPH_POINTS] = {0};
 static int16_t power3HistoryY[MYCILA_GRAPH_POINTS] = {0};
 
-static bool udpSendEnabled = true;
+static bool jsy163UdpPublishEnabled = true;
+static bool jsy194Channel1UdpPublishEnabled = true;
+static bool jsy194Channel2UdpPublishEnabled = true;
+static bool jsy333PhaseAUdpPublishEnabled = true;
+static bool jsy333PhaseBUdpPublishEnabled = true;
+static bool jsy333PhaseCUdpPublishEnabled = true;
+
 static uint16_t jsyModel = MYCILA_JSY_MK_UNKNOWN;
 
 // circular buffer for msg rate
@@ -191,6 +213,10 @@ static volatile float messageRate = 0;
 // circular buffer for data rate
 static Mycila::CircularBuffer<uint32_t, MYCILA_UDP_SEND_RATE_WINDOW> dataRateBuffer;
 static volatile uint32_t dataRate = 0;
+
+// Shelly Emulation: ID remapping
+static uint8_t shellyIDForJSYChannel1 = 0;
+static uint8_t shellyIDForJSYChannel2 = 1;
 
 static Mycila::Task jsyTask("JSY", [](void* params) { jsy.read(); });
 
@@ -215,7 +241,6 @@ static Mycila::Task networkUpTask("Network UP", Mycila::Task::Type::ONCE, [](voi
 
 static Mycila::Task otaTask("OTA", Mycila::Task::Type::ONCE, [](void* params) {
   ESP_LOGI(TAG, "Preparing OTA update...");
-  udpSendEnabled = false;
   jsy.end();
 });
 
@@ -238,9 +263,17 @@ static Mycila::Task dashboardTask("Dashboard", [](void* params) {
 
   messageRateCard.setValue(messageRate);
   dataRateCard.setValue(dataRate);
-  publishDataCard.setValue(udpSendEnabled);
+  jsy163Publish.setValue(jsy163UdpPublishEnabled);
+  jsy194Publish1.setValue(jsy194Channel1UdpPublishEnabled);
+  jsy194Publish2.setValue(jsy194Channel2UdpPublishEnabled);
+  jsy333PublishA.setValue(jsy333PhaseAUdpPublishEnabled);
+  jsy333PublishB.setValue(jsy333PhaseBUdpPublishEnabled);
+  jsy333PublishC.setValue(jsy333PhaseCUdpPublishEnabled);
+  jsy194ShellyIDChan1.setValue(shellyIDForJSYChannel1);
+  jsy194ShellyIDChan2.setValue(shellyIDForJSYChannel2);
 
   switch (jsyModel) {
+    case MYCILA_JSY_MK_1031:
     case MYCILA_JSY_MK_163: {
       jsy163Frequency.setValue(prevData.single().frequency);
       jsy163Voltage.setValue(prevData.single().voltage);
@@ -397,10 +430,134 @@ static int get_id_param(const AsyncWebServerRequest* request) {
   if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
     return id == 0 ? 0 : -1;
   }
+  // JSY-MK-333
   if (prevData.model == MYCILA_JSY_MK_333) {
     return id < 0 || id > 2 ? -1 : id;
   }
-  return id == 0 || id == 1 ? id : -1;
+  // JSY-MK-194
+  if (id == 0 || id == 1) {
+    return id;
+  }
+  // invalid id
+  return -1;
+}
+
+static int get_jsy_channel_for_shelly_id(int shellyID) {
+  if (shellyID == shellyIDForJSYChannel1) {
+    return 0;
+  } else if (shellyID == shellyIDForJSYChannel2) {
+    return 1;
+  } else {
+    return -1;
+  }
+}
+
+// Shelly.GetDeviceInfo
+
+static void ShellyGetDeviceInfo(const JsonObject& root) {
+  root["name"] = "Mycila JSY App";
+  root["id"] = (prevData.model == MYCILA_JSY_MK_333 ? "shellypro3em-" : "shellyproem50-") + espConnect.getMACAddress();
+  root["mac"] = espConnect.getMACAddress();
+  root["ver"] = MYCILA_JSY_VERSION;
+  root["app"] = prevData.model == MYCILA_JSY_MK_333 ? "3EM" : "EM";
+}
+
+// EM1.GetStatus
+
+static void EM1GetStatus(int id, const JsonObject& root) {
+  root["id"] = id;
+
+  if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
+    root["voltage"] = prevData.single().voltage;
+    root["current"] = prevData.single().current;
+    root["act_power"] = prevData.single().activePower;
+    root["aprt_power"] = prevData.single().apparentPower;
+    root["pf"] = prevData.single().powerFactor;
+    root["freq"] = prevData.single().frequency;
+
+  } else if (prevData.model == MYCILA_JSY_MK_333) {
+    root["voltage"] = prevData.phase(id).voltage;
+    root["current"] = prevData.phase(id).current;
+    root["act_power"] = prevData.phase(id).activePower;
+    root["aprt_power"] = prevData.phase(id).apparentPower;
+    root["pf"] = prevData.phase(id).powerFactor;
+    root["freq"] = prevData.phase(id).frequency;
+
+  } else if (prevData.model == MYCILA_JSY_MK_193 || prevData.model == MYCILA_JSY_MK_194) {
+    int channel = get_jsy_channel_for_shelly_id(id);
+    root["voltage"] = prevData.channel(channel).voltage;
+    root["current"] = prevData.channel(channel).current;
+    root["act_power"] = prevData.channel(channel).activePower;
+    root["aprt_power"] = prevData.channel(channel).apparentPower;
+    root["pf"] = prevData.channel(channel).powerFactor;
+    root["freq"] = prevData.channel(channel).frequency;
+  }
+
+  root["calibration"] = "factory";
+}
+
+// EM1Data.GetStatus
+
+static void EM1DataGetStatus(int id, const JsonObject& root) {
+  root["id"] = id;
+
+  if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
+    root["total_act_energy"] = prevData.single().activeEnergy;
+    root["total_act_ret_energy"] = prevData.single().activeEnergyReturned;
+
+  } else if (prevData.model == MYCILA_JSY_MK_333) {
+    root["total_act_energy"] = prevData.phase(id).activeEnergy;
+    root["total_act_ret_energy"] = prevData.phase(id).activeEnergyReturned;
+
+  } else if (prevData.model == MYCILA_JSY_MK_193 || prevData.model == MYCILA_JSY_MK_194) {
+    int channel = get_jsy_channel_for_shelly_id(id);
+    root["total_act_energy"] = prevData.channel(channel).activeEnergy;
+    root["total_act_ret_energy"] = prevData.channel(channel).activeEnergyReturned;
+  }
+}
+
+// EM.GetStatus
+
+static void EMGetStatus(int id, const JsonObject& root) {
+  root["id"] = id;
+  root["a_current"] = prevData.phaseA().current;
+  root["a_voltage"] = prevData.phaseA().voltage;
+  root["a_act_power"] = prevData.phaseA().activePower;
+  root["a_aprt_power"] = prevData.phaseA().apparentPower;
+  root["a_pf"] = prevData.phaseA().powerFactor;
+  root["a_freq"] = prevData.phaseA().frequency;
+  root["b_current"] = prevData.phaseB().current;
+  root["b_voltage"] = prevData.phaseB().voltage;
+  root["b_act_power"] = prevData.phaseB().activePower;
+  root["b_aprt_power"] = prevData.phaseB().apparentPower;
+  root["b_pf"] = prevData.phaseB().powerFactor;
+  root["b_freq"] = prevData.phaseB().frequency;
+  root["c_current"] = prevData.phaseC().current;
+  root["c_voltage"] = prevData.phaseC().voltage;
+  root["c_active_power"] = prevData.phaseC().activePower;
+  root["c_aprt_power"] = prevData.phaseC().apparentPower;
+  root["c_pf"] = prevData.phaseC().powerFactor;
+  root["c_freq"] = prevData.phaseC().frequency;
+  root["n_current"] = 0;
+  root["total_current"] = prevData.aggregate.current;
+  root["total_act_power"] = prevData.aggregate.activePower;
+  root["total_aprt_power"] = prevData.aggregate.apparentPower;
+  root["user_calibrated_phase"] = JsonArray();
+  root["errors"] = JsonArray();
+}
+
+// EMData.GetStatus
+
+static void EMDataGetStatus(int id, const JsonObject& root) {
+  root["id"] = id;
+  root["a_total_act_energy"] = prevData.phaseA().activeEnergy;
+  root["a_total_act_ret_energy"] = prevData.phaseA().activeEnergyReturned;
+  root["b_total_act_energy"] = prevData.phaseB().activeEnergy;
+  root["b_total_act_ret_energy"] = prevData.phaseB().activeEnergyReturned;
+  root["c_total_act_energy"] = prevData.phaseC().activeEnergy;
+  root["c_total_act_ret_energy"] = prevData.phaseC().activeEnergyReturned;
+  root["total_act"] = prevData.aggregate.activeEnergy;
+  root["total_act_ret"] = prevData.aggregate.activeEnergyReturned;
 }
 
 void setup() {
@@ -433,7 +590,14 @@ void setup() {
 
   // config
   preferences.begin("jsy", false);
-  udpSendEnabled = preferences.getBool("udp_send", udpSendEnabled);
+  jsy163UdpPublishEnabled = preferences.getBool("jsy163_udp", jsy163UdpPublishEnabled);
+  jsy194Channel1UdpPublishEnabled = preferences.getBool("jsy194_ch1_udp", jsy194Channel1UdpPublishEnabled);
+  jsy194Channel2UdpPublishEnabled = preferences.getBool("jsy194_ch2_udp", jsy194Channel2UdpPublishEnabled);
+  jsy333PhaseAUdpPublishEnabled = preferences.getBool("jsy333_a_udp", jsy333PhaseAUdpPublishEnabled);
+  jsy333PhaseBUdpPublishEnabled = preferences.getBool("jsy333_b_udp", jsy333PhaseBUdpPublishEnabled);
+  jsy333PhaseCUdpPublishEnabled = preferences.getBool("jsy333_c_udp", jsy333PhaseCUdpPublishEnabled);
+  shellyIDForJSYChannel1 = preferences.getUChar("shelly_id_ch1", shellyIDForJSYChannel1);
+  shellyIDForJSYChannel2 = preferences.getUChar("shelly_id_ch2", shellyIDForJSYChannel2);
 
   // tasks
   dashboardTask.setEnabledWhen([]() { return espConnect.isConnected() && !dashboard.isAsyncAccessInProgress(); });
@@ -485,14 +649,43 @@ void setup() {
   webServer.on("/api/jsy/publish", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
     const AsyncWebParameter* enableParam = request->getParam("switch");
     if (enableParam != nullptr) {
-      udpSendEnabled = enableParam->value() == "on";
-      preferences.putBool("udp_send", udpSendEnabled);
-      publishDataCard.setValue(udpSendEnabled);
-      dashboard.refresh(publishDataCard);
+      bool enabled = enableParam->value() == "on";
+      jsy163UdpPublishEnabled = enabled;
+      jsy194Channel1UdpPublishEnabled = enabled;
+      jsy194Channel2UdpPublishEnabled = enabled;
+      jsy333PhaseAUdpPublishEnabled = enabled;
+      jsy333PhaseBUdpPublishEnabled = enabled;
+      jsy333PhaseCUdpPublishEnabled = enabled;
+      preferences.putBool("jsy163_udp", jsy163UdpPublishEnabled);
+      preferences.putBool("jsy194_ch1_udp", jsy194Channel1UdpPublishEnabled);
+      preferences.putBool("jsy194_ch2_udp", jsy194Channel2UdpPublishEnabled);
+      preferences.putBool("jsy333_a_udp", jsy333PhaseAUdpPublishEnabled);
+      preferences.putBool("jsy333_b_udp", jsy333PhaseBUdpPublishEnabled);
+      preferences.putBool("jsy333_c_udp", jsy333PhaseCUdpPublishEnabled);
+      jsy163Publish.setValue(jsy163UdpPublishEnabled);
+      jsy194Publish1.setValue(jsy194Channel1UdpPublishEnabled);
+      jsy194Publish2.setValue(jsy194Channel2UdpPublishEnabled);
+      jsy333PublishA.setValue(jsy333PhaseAUdpPublishEnabled);
+      jsy333PublishB.setValue(jsy333PhaseBUdpPublishEnabled);
+      jsy333PublishC.setValue(jsy333PhaseCUdpPublishEnabled);
     }
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
-    root["switch"] = udpSendEnabled ? "on" : "off";
+    switch (prevData.model) {
+      case MYCILA_JSY_MK_1031:
+      case MYCILA_JSY_MK_163:
+        root["switch"] = jsy163UdpPublishEnabled ? "on" : "off";
+        break;
+      case MYCILA_JSY_MK_193:
+      case MYCILA_JSY_MK_194:
+        root["switch"] = jsy194Channel1UdpPublishEnabled || jsy194Channel2UdpPublishEnabled ? "on" : "off";
+        break;
+      case MYCILA_JSY_MK_333:
+        root["switch"] = jsy333PhaseAUdpPublishEnabled || jsy333PhaseBUdpPublishEnabled || jsy333PhaseCUdpPublishEnabled ? "on" : "off";
+        break;
+      default:
+        break;
+    }
     response->setLength();
     request->send(response);
   });
@@ -541,14 +734,24 @@ void setup() {
   webServer.on("/rpc/Shelly.GetDeviceInfo", HTTP_GET, [](AsyncWebServerRequest* request) {
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
-    root["name"] = "Mycila JSY App";
-    root["id"] = (prevData.model == MYCILA_JSY_MK_333 ? "shellypro3em-" : "shellyproem50-") + espConnect.getMACAddress();
-    root["mac"] = espConnect.getMACAddress();
-    root["ver"] = MYCILA_JSY_VERSION;
-    root["app"] = prevData.model == MYCILA_JSY_MK_333 ? "3EM" : "EM";
+    ShellyGetDeviceInfo(root);
     response->setLength();
     request->send(response);
   });
+  // API: /rpc/Shelly.GetStatus
+  // For: Shelly EM
+  // Aggregate status
+  webServer.on("/rpc/Shelly.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    EM1GetStatus(0, root["em1:0"].to<JsonObject>());
+    EM1GetStatus(1, root["em1:1"].to<JsonObject>());
+    EM1DataGetStatus(0, root["em1data:0"].to<JsonObject>());
+    EM1DataGetStatus(1, root["em1data:1"].to<JsonObject>());
+    response->setLength();
+    request->send(response);
+  });
+
   // API: /rpc/EM1.GetStatus?id=0|1|2
   // For: Shelly EM & 3EM
   // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EM1/#em1getstatus-example
@@ -561,30 +764,7 @@ void setup() {
     }
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
-    root["id"] = id;
-    if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
-      root["voltage"] = prevData.single().voltage;
-      root["current"] = prevData.single().current;
-      root["act_power"] = prevData.single().activePower;
-      root["aprt_power"] = prevData.single().apparentPower;
-      root["pf"] = prevData.single().powerFactor;
-      root["freq"] = prevData.single().frequency;
-    } else if (prevData.model == MYCILA_JSY_MK_333) {
-      root["voltage"] = prevData.phase(id).voltage;
-      root["current"] = prevData.phase(id).current;
-      root["act_power"] = prevData.phase(id).activePower;
-      root["aprt_power"] = prevData.phase(id).apparentPower;
-      root["pf"] = prevData.phase(id).powerFactor;
-      root["freq"] = prevData.phase(id).frequency;
-    } else {
-      root["voltage"] = prevData.channel(id).voltage;
-      root["current"] = prevData.channel(id).current;
-      root["act_power"] = prevData.channel(id).activePower;
-      root["aprt_power"] = prevData.channel(id).apparentPower;
-      root["pf"] = prevData.channel(id).powerFactor;
-      root["freq"] = prevData.channel(id).frequency;
-    }
-    root["calibration"] = "factory";
+    EM1GetStatus(id, root);
     response->setLength();
     request->send(response);
   });
@@ -600,17 +780,7 @@ void setup() {
     }
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
-    root["id"] = id;
-    if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
-      root["total_act_energy"] = prevData.single().activeEnergy;
-      root["total_act_ret_energy"] = prevData.single().activeEnergyReturned;
-    } else if (prevData.model == MYCILA_JSY_MK_333) {
-      root["total_act_energy"] = prevData.phase(id).activeEnergy;
-      root["total_act_ret_energy"] = prevData.phase(id).activeEnergyReturned;
-    } else {
-      root["total_act_energy"] = prevData.channel(id).activeEnergy;
-      root["total_act_ret_energy"] = prevData.channel(id).activeEnergyReturned;
-    }
+    EM1DataGetStatus(id, root);
     response->setLength();
     request->send(response);
   });
@@ -660,31 +830,7 @@ void setup() {
     // model is JSY-MK-333 and id == 0, 1 or 2
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
-    root["id"] = id;
-    root["a_current"] = prevData.phaseA().current;
-    root["a_voltage"] = prevData.phaseA().voltage;
-    root["a_act_power"] = prevData.phaseA().activePower;
-    root["a_aprt_power"] = prevData.phaseA().apparentPower;
-    root["a_pf"] = prevData.phaseA().powerFactor;
-    root["a_freq"] = prevData.phaseA().frequency;
-    root["b_current"] = prevData.phaseB().current;
-    root["b_voltage"] = prevData.phaseB().voltage;
-    root["b_act_power"] = prevData.phaseB().activePower;
-    root["b_aprt_power"] = prevData.phaseB().apparentPower;
-    root["b_pf"] = prevData.phaseB().powerFactor;
-    root["b_freq"] = prevData.phaseB().frequency;
-    root["c_current"] = prevData.phaseC().current;
-    root["c_voltage"] = prevData.phaseC().voltage;
-    root["c_active_power"] = prevData.phaseC().activePower;
-    root["c_aprt_power"] = prevData.phaseC().apparentPower;
-    root["c_pf"] = prevData.phaseC().powerFactor;
-    root["c_freq"] = prevData.phaseC().frequency;
-    root["n_current"] = 0;
-    root["total_current"] = prevData.aggregate.current;
-    root["total_act_power"] = prevData.aggregate.activePower;
-    root["total_aprt_power"] = prevData.aggregate.apparentPower;
-    root["user_calibrated_phase"] = JsonArray();
-    root["errors"] = JsonArray();
+    EMGetStatus(id, root);
     response->setLength();
     request->send(response);
   });
@@ -716,18 +862,11 @@ void setup() {
     // model is JSY-MK-333 and id == 0, 1 or 2
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
-    root["id"] = id;
-    root["a_total_act_energy"] = prevData.phaseA().activeEnergy;
-    root["a_total_act_ret_energy"] = prevData.phaseA().activeEnergyReturned;
-    root["b_total_act_energy"] = prevData.phaseB().activeEnergy;
-    root["b_total_act_ret_energy"] = prevData.phaseB().activeEnergyReturned;
-    root["c_total_act_energy"] = prevData.phaseC().activeEnergy;
-    root["c_total_act_ret_energy"] = prevData.phaseC().activeEnergyReturned;
-    root["total_act"] = prevData.aggregate.activeEnergy;
-    root["total_act_ret"] = prevData.aggregate.activeEnergyReturned;
+    EMDataGetStatus(id, root);
     response->setLength();
     request->send(response);
   });
+
   // API: /rpc
   // For: Shelly EM & 3EM
   // Returns the list of available API endpoints
@@ -735,6 +874,7 @@ void setup() {
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
     root["/rpc/Shelly.GetDeviceInfo"] = "Returns the device information";
+    root["/rpc/Shelly.GetStatus"] = "Returns the current Shelly status";
     if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
       root["/rpc/EM1.GetStatus?id=0"] = "Returns the current EM1 status";
       root["/rpc/EM1Data.GetStatus?id=0"] = "Returns the current EM1 data status";
@@ -772,11 +912,67 @@ void setup() {
     energyReset.setValue(0);
     dashboard.refresh(energyReset);
   });
-  publishDataCard.onChange([](bool state) {
-    udpSendEnabled = state;
-    preferences.putBool("udp_send", udpSendEnabled);
-    publishDataCard.setValue(udpSendEnabled);
-    dashboard.refresh(publishDataCard);
+  jsy194ShellyIDChan1.onChange([](uint8_t value) {
+    if (value == 0) {
+      shellyIDForJSYChannel1 = 0;
+      shellyIDForJSYChannel2 = 1;
+    } else if (value == 1) {
+      shellyIDForJSYChannel1 = 1;
+      shellyIDForJSYChannel2 = 0;
+    }
+    preferences.putUChar("shelly_id_ch1", shellyIDForJSYChannel1);
+    preferences.putUChar("shelly_id_ch2", shellyIDForJSYChannel2);
+    dashboard.refresh(jsy194ShellyIDChan1);
+    dashboard.refresh(jsy194ShellyIDChan2);
+  });
+  jsy194ShellyIDChan2.onChange([](uint8_t value) {
+    if (value == 0) {
+      shellyIDForJSYChannel1 = 1;
+      shellyIDForJSYChannel2 = 0;
+    } else if (value == 1) {
+      shellyIDForJSYChannel1 = 0;
+      shellyIDForJSYChannel2 = 1;
+    }
+    preferences.putUChar("shelly_id_ch1", shellyIDForJSYChannel1);
+    preferences.putUChar("shelly_id_ch2", shellyIDForJSYChannel2);
+    dashboard.refresh(jsy194ShellyIDChan1);
+    dashboard.refresh(jsy194ShellyIDChan2);
+  });
+  jsy163Publish.onChange([](bool state) {
+    jsy163UdpPublishEnabled = state;
+    preferences.putBool("jsy163_udp", jsy163UdpPublishEnabled);
+    jsy163Publish.setValue(jsy163UdpPublishEnabled);
+    dashboard.refresh(jsy163Publish);
+  });
+  jsy194Publish1.onChange([](bool state) {
+    jsy194Channel1UdpPublishEnabled = state;
+    preferences.putBool("jsy194_ch1_udp", jsy194Channel1UdpPublishEnabled);
+    jsy194Publish1.setValue(jsy194Channel1UdpPublishEnabled);
+    dashboard.refresh(jsy194Publish1);
+  });
+  jsy194Publish2.onChange([](bool state) {
+    jsy194Channel2UdpPublishEnabled = state;
+    preferences.putBool("jsy194_ch2_udp", jsy194Channel2UdpPublishEnabled);
+    jsy194Publish2.setValue(jsy194Channel2UdpPublishEnabled);
+    dashboard.refresh(jsy194Publish2);
+  });
+  jsy333PublishA.onChange([](bool state) {
+    jsy333PhaseAUdpPublishEnabled = state;
+    preferences.putBool("jsy333_a_udp", jsy333PhaseAUdpPublishEnabled);
+    jsy333PublishA.setValue(jsy333PhaseAUdpPublishEnabled);
+    dashboard.refresh(jsy333PublishA);
+  });
+  jsy333PublishB.onChange([](bool state) {
+    jsy333PhaseBUdpPublishEnabled = state;
+    preferences.putBool("jsy333_b_udp", jsy333PhaseBUdpPublishEnabled);
+    jsy333PublishB.setValue(jsy333PhaseBUdpPublishEnabled);
+    dashboard.refresh(jsy333PublishB);
+  });
+  jsy333PublishC.onChange([](bool state) {
+    jsy333PhaseCUdpPublishEnabled = state;
+    preferences.putBool("jsy333_c_udp", jsy333PhaseCUdpPublishEnabled);
+    jsy333PublishC.setValue(jsy333PhaseCUdpPublishEnabled);
+    dashboard.refresh(jsy333PublishC);
   });
 
   dashboard.onBeforeUpdate([](bool changes_only) {
@@ -865,10 +1061,32 @@ void setup() {
 
     prevData = data;
 
-    if (!udpSendEnabled) {
-      messageRate = 0;
-      dataRate = 0;
-      return;
+    switch (prevData.model) {
+      case MYCILA_JSY_MK_1031:
+      case MYCILA_JSY_MK_163:
+        if (!jsy163UdpPublishEnabled) {
+          messageRate = 0;
+          dataRate = 0;
+          return;
+        }
+        break;
+      case MYCILA_JSY_MK_193:
+      case MYCILA_JSY_MK_194:
+        if (!jsy194Channel1UdpPublishEnabled && !jsy194Channel2UdpPublishEnabled) {
+          messageRate = 0;
+          dataRate = 0;
+          return;
+        }
+        break;
+      case MYCILA_JSY_MK_333:
+        if (!jsy333PhaseAUdpPublishEnabled && !jsy333PhaseBUdpPublishEnabled && !jsy333PhaseCUdpPublishEnabled) {
+          messageRate = 0;
+          dataRate = 0;
+          return;
+        }
+        break;
+      default:
+        break;
     }
 
     const Mycila::ESPConnect::Mode mode = espConnect.getMode();
@@ -881,6 +1099,32 @@ void setup() {
     JsonDocument doc;
     JsonObject root = doc.to<JsonObject>();
     jsy.toJson(root);
+
+    // filter json according to enabled udp publish
+    switch (prevData.model) {
+      case MYCILA_JSY_MK_193:
+      case MYCILA_JSY_MK_194:
+        if (!jsy194Channel1UdpPublishEnabled) {
+          root.remove("channel1");
+        }
+        if (!jsy194Channel2UdpPublishEnabled) {
+          root.remove("channel2");
+        }
+        break;
+      case MYCILA_JSY_MK_333:
+        if (!jsy333PhaseAUdpPublishEnabled) {
+          root.remove("phaseA");
+        }
+        if (!jsy333PhaseBUdpPublishEnabled) {
+          root.remove("phaseB");
+        }
+        if (!jsy333PhaseCUdpPublishEnabled) {
+          root.remove("phaseC");
+        }
+        break;
+      default:
+        break;
+    }
 
     // buffer[0] == MYCILA_UDP_MSG_TYPE_JSY_DATA (1)
     // buffer[1] == size_t (4)
@@ -940,7 +1184,9 @@ void setup() {
 
   jsyModel = jsy.getModel();
 
-  if (jsyModel == MYCILA_JSY_MK_194 || jsyModel == MYCILA_JSY_MK_333 || jsyModel == MYCILA_JSY_MK_UNKNOWN) {
+  if (jsyModel == MYCILA_JSY_MK_193 || jsyModel == MYCILA_JSY_MK_194 || jsyModel == MYCILA_JSY_MK_333 || jsyModel == MYCILA_JSY_MK_UNKNOWN) {
+    dashboard.remove(jsy163Publish);
+    dashboard.remove(jsy163Data);
     dashboard.remove(jsy163Frequency);
     dashboard.remove(jsy163Voltage);
     dashboard.remove(jsy163current);
@@ -954,7 +1200,15 @@ void setup() {
     dashboard.remove(jsy163ActivePowerHistory);
   }
 
-  if (jsyModel == MYCILA_JSY_MK_163 || jsyModel == MYCILA_JSY_MK_333 || jsyModel == MYCILA_JSY_MK_UNKNOWN) {
+  if (jsyModel == MYCILA_JSY_MK_163 || jsyModel == MYCILA_JSY_MK_1031 || jsyModel == MYCILA_JSY_MK_333 || jsyModel == MYCILA_JSY_MK_UNKNOWN) {
+    dashboard.remove(jsy194Publish1);
+    dashboard.remove(jsy194Publish2);
+    dashboard.remove(jsy194Shelly);
+    dashboard.remove(jsy194ShellyIDChan1);
+    dashboard.remove(jsy194ShellyIDChan2);
+    dashboard.remove(jsy194Data1);
+    dashboard.remove(jsy194Data2);
+    dashboard.remove(jsy194Charts);
     dashboard.remove(jsy194Channel1Frequency);
     dashboard.remove(jsy194Channel1Voltage);
     dashboard.remove(jsy194Channel1Current);
@@ -979,7 +1233,14 @@ void setup() {
     dashboard.remove(jsy194Channel2ActivePowerHistory);
   }
 
-  if (jsyModel == MYCILA_JSY_MK_163 || jsyModel == MYCILA_JSY_MK_194 || jsyModel == MYCILA_JSY_MK_UNKNOWN) {
+  if (jsyModel == MYCILA_JSY_MK_163 || jsyModel == MYCILA_JSY_MK_1031 || jsyModel == MYCILA_JSY_MK_193 || jsyModel == MYCILA_JSY_MK_194 || jsyModel == MYCILA_JSY_MK_UNKNOWN) {
+    dashboard.remove(jsy333PublishA);
+    dashboard.remove(jsy333PublishB);
+    dashboard.remove(jsy333PublishC);
+    dashboard.remove(jsy333DataA);
+    dashboard.remove(jsy333DataB);
+    dashboard.remove(jsy333DataC);
+    dashboard.remove(jsy333Charts);
     dashboard.remove(jsy333PhaseAFrequency);
     dashboard.remove(jsy333PhaseAVoltage);
     dashboard.remove(jsy333PhaseACurrent);
