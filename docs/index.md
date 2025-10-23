@@ -4,7 +4,7 @@ An Arduino / ESP32 web application for Shenzhen Jiansiyan (JSY) electricity mete
 Mycila JSY App reads JSY series meters (JSY1031, JSY-MK-163, JSY-MK-193, JSY-MK-194, JSY-MK-227, JSY-MK-229, JSY-MK-333 from [https://www.jsypowermeter.com](https://www.jsypowermeter.com)) and exposes a web dashboard, UDP broadcast stream, and a set of REST endpoints.
 It can also emulate Shelly EM and Shelly 3EM REST APIs so home automation platforms that speak Shelly devices can integrate with JSY meters.
 
-![](https://github.com/mathieucarbou/MycilaJSY/assets/61346/3066bf12-31d5-45de-9303-d810f14731d0)
+[![](https://mathieu.carbou.me/MycilaJSYApp/screenshot.png)](https://mathieu.carbou.me/MycilaJSYApp/screenshot.png)
 
 [![Latest Release](https://img.shields.io/github/release/mathieucarbou/MycilaJSYApp.svg)](https://GitHub.com/mathieucarbou/MycilaJSYApp/releases/)
 [![GPLv3 license](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -28,8 +28,10 @@ Table of contents
 - Reads JSY electricity meters over a serial interface (many JSY models supported).
 - Web dashboard (via ESPDash) with real-time graphs and statistics.
 - UDP broadcast of JSY data (binary MsgPack style payload) for listeners.
+- Per-channel UDP publish switches (enable/disable publish per JSY channel or phase via the dashboard).
 - OTA firmware update support (ElegantOTA).
 - Emulates Shelly EM and Shelly 3EM REST APIs so 3rd-party integrations can treat the device as a Shelly energy meter.
+- Shelly ID remapping for two-channel JSY models: map Shelly ids 0/1 to JSY Channel 1/2 from the dashboard.
 - Configurable pins / serial port via build flags.
 
 Important: this application can mimic Shelly EM and Shelly 3EM devices (Shelly Gen2 API) so it is easy to integrate into platforms expecting Shelly devices.
@@ -116,7 +118,9 @@ PIO_BOARD=esp32dev PLATFORMIO_BUILD_SRC_FLAGS="-DMYCILA_JSY_SERIAL=Serial2 -DMYC
 
 The device also broadcasts JSY data via UDP on port 53964 by default (configurable).
 
-## REST API — implemented endpoints
+Tip: you can toggle UDP publishing per channel/phase directly from the dashboard (each channel/phase card includes an "UDP Publish" switch). These preferences are saved.
+
+## REST API
 
 The following HTTP endpoints are implemented in `src/main.cpp` (matching the Shelly Gen2 API for EM / 3EM where applicable). Use `http://<device-ip>` as base.
 
@@ -156,7 +160,8 @@ The following HTTP endpoints are implemented in `src/main.cpp` (matching the She
 - `GET|POST /api/jsy/publish`
 
   - With no query parameter: returns the UDP data publishing state as JSON { "switch": "on"|"off" }.
-  - With `?switch=on` or `?switch=off`: enables/disables UDP broadcasting and persists preference.
+  - With `?switch=on` or `?switch=off`: enables/disables UDP broadcasting for all channels/phases and persists preference.
+  - Note: per-channel publish toggles are available from the dashboard UI and are persisted. The GET state reports "on" if any channel/phase is enabled.
 
 - `GET|POST /api/restart`
 
@@ -165,9 +170,17 @@ The following HTTP endpoints are implemented in `src/main.cpp` (matching the She
 - `GET|POST /api/reset`
   - Clears WiFi configuration (factory reset) and restarts the device. Returns 200.
 
-### Shelly EM & 3EM emulation
+- `GET /rpc`
+
+  - Returns a JSON object listing the available RPC endpoints for the detected JSY model.
+
+### Shelly EM and 3EM emulation
 
 The project exposes Shelly-compatible endpoints (Shelly Gen2 API style) so third-party platforms can treat the device as a Shelly EM or Shelly 3EM. The emulation endpoints implemented in `src/main.cpp` are:
+
+- `GET /rpc/Shelly.GetStatus`
+
+  - Returns an aggregate Shelly EM-style status object containing `em1:0`, `em1:1`, `em1data:0`, and `em1data:1` sections.
 
 - `GET /rpc/Shelly.GetDeviceInfo`
 
@@ -187,7 +200,7 @@ The project exposes Shelly-compatible endpoints (Shelly Gen2 API style) so third
 
   - Shelly EM / 3EM compatible status for a single channel/phase. Returns voltage, current, active/apparent power, power factor, frequency and calibration.
   - For single-phase meters (JSY-MK-163 / JSY1031) `id` must be 0.
-  - For two-channel meters `id` must be 0 or 1.
+  - For two-channel meters `id` must be 0 or 1; ids 0/1 are mapped to JSY channels according to the dashboard Shelly ID remapping controls.
   - For three-phase (JSY-MK-333) `id` can be 0, 1 or 2 (phase A/B/C).
 
 ```json
@@ -206,6 +219,7 @@ The project exposes Shelly-compatible endpoints (Shelly Gen2 API style) so third
 - `GET /rpc/EM1Data.GetStatus?id=0|1|2`
 
   - Returns total active energy and returned energy for the requested channel/phase.
+  - For two-channel meters, ids 0/1 follow the same dashboard-configured Shelly ID remapping.
 
 ```json
 { "id": 0, "total_act_energy": 2776175.11, "total_act_ret_energy": 571584.87 }
@@ -271,7 +285,7 @@ Notes about the Shelly endpoints:
 
 - By default the device broadcasts UDP packets on port 53964. The packet format includes a small header then a MsgPack-like payload and a CRC32. See `src/main.cpp` for serialization details. The UDP message type for JSY data is 0x02.
 
-## For developers / dependencies
+## For developers
 
 The project uses these libraries (examples shown in `src/main.cpp` includes):
 
