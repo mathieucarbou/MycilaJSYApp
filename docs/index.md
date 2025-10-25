@@ -75,22 +75,23 @@ OTA update (upload via web UI):
 
 After flashing the device the serial pins used for the JSY are printed to the Serial console during boot. The default board pin mappings are in the code and summarized below.
 
-| Board               | Serial2 RX (JSY TX) | Serial2 TX (JSY RX) |
-| :------------------ | :-----------------: | :-----------------: |
-| denky_d4            |         22          |         21          |
-| esp32-c3-devkitc-02 |         18          |         19          |
-| esp32-c6-devkitc-1  |          4          |          5          |
-| esp32-gateway       |         16          |         17          |
-| esp32-poe           |         35          |         33          |
-| esp32-s2-saola-1    |         18          |         17          |
-| esp32-s3-devkitc-1  |         16          |         17          |
-| esp32dev            |         16          |         17          |
-| esp32s3box          |         19          |         20          |
-| lilygo_eth_lite_s3  |         17          |         18          |
-| nodemcu-32s         |         16          |         17          |
-| tinypico            |          4          |         25          |
-| wipy3               |          4          |         25          |
-| wt32-eth01          |          5          |         17          |
+| Board                 | Serial2 RX (JSY TX) | Serial2 TX (JSY RX) | WiFi | Ethernet |
+| :-------------------- | :-----------------: | :-----------------: | :--: | :------: |
+| denky_d4              |         22          |         21          |  ✅  |    ❌    |
+| esp32-c3-devkitc-02   |         18          |         19          |  ✅  |    ❌    |
+| esp32-c6-devkitc-1    |          4          |          5          |  ✅  |    ❌    |
+| esp32-gateway         |         16          |         17          |  ✅  |    ✅    |
+| esp32-poe             |         35          |         33          |  ✅  |    ✅    |
+| esp32-s2-saola-1      |         18          |         17          |  ✅  |    ❌    |
+| esp32-s3-devkitc-1    |         16          |         17          |  ✅  |    ❌    |
+| esp32dev              |         16          |         17          |  ✅  |    ❌    |
+| esp32s3box            |         19          |         20          |  ✅  |    ❌    |
+| lilygo_eth_lite_s3    |         17          |         18          |  ✅  |    ✅    |
+| nodemcu-32s           |         16          |         17          |  ✅  |    ❌    |
+| tinypico              |          4          |         25          |  ✅  |    ❌    |
+| waveshare_esp32s3_eth |         19          |         20          |  ✅  |    ✅    |
+| wipy3                 |          4          |         25          |  ✅  |    ❌    |
+| wt32-eth01            |          5          |         17          |  ✅  |    ✅    |
 
 Electric wiring note for 2-channel JSY boards:
 
@@ -170,6 +171,7 @@ The following HTTP endpoints are implemented in `src/main.cpp` (matching the She
   - Triggers a device restart. Returns 200 immediately.
 
 - `GET|POST /api/reset`
+
   - Clears WiFi configuration (factory reset) and restarts the device. Returns 200.
 
 - `GET /rpc`
