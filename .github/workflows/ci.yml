@@ -97,6 +97,7 @@ jobs:
             "lilygo_eth_lite_s3",
             "nodemcu-32s",
             "tinypico",
+            "waveshare_esp32s3_eth",
             "wipy3",
             "wt32-eth01"
           ]
