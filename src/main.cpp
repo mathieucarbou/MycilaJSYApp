@@ -729,8 +729,7 @@ void setup() {
   // API Routes to fake Shelly EM and 3EM
 
   // API: /rpc/Shelly.GetDeviceInfo
-  // For: Shelly EM & Shelly Pro EM
-  // Return the device information
+  // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Shelly#shellygetdeviceinfo
   webServer.on("/rpc/Shelly.GetDeviceInfo", HTTP_GET, [](AsyncWebServerRequest* request) {
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
@@ -739,8 +738,7 @@ void setup() {
     request->send(response);
   });
   // API: /rpc/Shelly.GetStatus
-  // For: Shelly EM
-  // Aggregate status
+  // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Shelly#shellygetstatus
   webServer.on("/rpc/Shelly.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
@@ -751,9 +749,7 @@ void setup() {
     response->setLength();
     request->send(response);
   });
-
   // API: /rpc/EM1.GetStatus?id=0|1|2
-  // For: Shelly EM & 3EM
   // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EM1/#em1getstatus-example
   // Example: { "id": 0, "voltage": 240.2, "current": 6.473, "act_power": 1327.6, "aprt_power": 1557.6, "pf": 0.87, "freq": 50, "calibration": "factory" }
   webServer.on("/rpc/EM1.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -769,7 +765,6 @@ void setup() {
     request->send(response);
   });
   // API: /rpc/EM1Data.GetStatus?id=0|1|2
-  // For: Shelly EM & 3EM
   // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EM1Data/#em1datagetstatus-example
   // Example: { "id": 0, "total_act_energy": 2776175.11, "total_act_ret_energy": 571584.87 }
   webServer.on("/rpc/EM1Data.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -785,7 +780,6 @@ void setup() {
     request->send(response);
   });
   // API: /rpc/EM.GetStatus?id=0|1|2
-  // For: Shelly 3EM
   // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EM/#emgetstatus-example
   // Example:
   // {
@@ -835,7 +829,6 @@ void setup() {
     request->send(response);
   });
   // API: /rpc/EMData.GetStatus?id=0|1|2
-  // For: Shelly 3EM
   // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EMData/#emdatagetstatus-example
   // Example:
   // {
