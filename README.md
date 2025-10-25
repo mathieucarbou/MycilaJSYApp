@@ -288,6 +288,9 @@ The project exposes Shelly-compatible endpoints (Shelly Gen2 API style) so third
 }
 ```
 
+- `GET /status` and `GET /emeter/0`, `GET /emeter/1`, `GET /emeter/2`
+  - Old Shelly EM and 3EM
+
 Notes about the Shelly endpoints:
 
 - The implementation mirrors the JSON fields used by Shelly Gen2 API as implemented in `src/main.cpp`.
