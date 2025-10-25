@@ -467,23 +467,27 @@ static void ShellyGetDeviceInfo(const JsonObject& root) {
 static void EM1GetStatus(int id, const JsonObject& root) {
   root["id"] = id;
 
-  if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
+  if (id == 0 && (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031)) {
     root["voltage"] = prevData.single().voltage;
     root["current"] = prevData.single().current;
     root["act_power"] = prevData.single().activePower;
     root["aprt_power"] = prevData.single().apparentPower;
     root["pf"] = prevData.single().powerFactor;
     root["freq"] = prevData.single().frequency;
+    // old shelly's
+    root["power"] = prevData.single().activePower;
 
-  } else if (prevData.model == MYCILA_JSY_MK_333) {
+  } else if ((id == 0 || id == 1 || id == 2) && prevData.model == MYCILA_JSY_MK_333) {
     root["voltage"] = prevData.phase(id).voltage;
     root["current"] = prevData.phase(id).current;
     root["act_power"] = prevData.phase(id).activePower;
     root["aprt_power"] = prevData.phase(id).apparentPower;
     root["pf"] = prevData.phase(id).powerFactor;
     root["freq"] = prevData.phase(id).frequency;
+    // old shelly's
+    root["power"] = prevData.phase(id).activePower;
 
-  } else if (prevData.model == MYCILA_JSY_MK_193 || prevData.model == MYCILA_JSY_MK_194) {
+  } else if ((id == 0 || id == 1) && (prevData.model == MYCILA_JSY_MK_193 || prevData.model == MYCILA_JSY_MK_194)) {
     int channel = get_jsy_channel_for_shelly_id(id);
     root["voltage"] = prevData.channel(channel).voltage;
     root["current"] = prevData.channel(channel).current;
@@ -491,6 +495,8 @@ static void EM1GetStatus(int id, const JsonObject& root) {
     root["aprt_power"] = prevData.channel(channel).apparentPower;
     root["pf"] = prevData.channel(channel).powerFactor;
     root["freq"] = prevData.channel(channel).frequency;
+    // old shelly's
+    root["power"] = prevData.channel(channel).activePower;
   }
 
   root["calibration"] = "factory";
@@ -501,18 +507,27 @@ static void EM1GetStatus(int id, const JsonObject& root) {
 static void EM1DataGetStatus(int id, const JsonObject& root) {
   root["id"] = id;
 
-  if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
+  if (id == 0 && (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031)) {
     root["total_act_energy"] = prevData.single().activeEnergy;
     root["total_act_ret_energy"] = prevData.single().activeEnergyReturned;
+    // old shelly's
+    root["total"] = prevData.single().activeEnergy;
+    root["total_returned"] = prevData.single().activeEnergyReturned;
 
-  } else if (prevData.model == MYCILA_JSY_MK_333) {
+  } else if ((id == 0 || id == 1 || id == 2) && prevData.model == MYCILA_JSY_MK_333) {
     root["total_act_energy"] = prevData.phase(id).activeEnergy;
     root["total_act_ret_energy"] = prevData.phase(id).activeEnergyReturned;
+    // old shelly's
+    root["total"] = prevData.phase(id).activeEnergy;
+    root["total_returned"] = prevData.phase(id).activeEnergyReturned;
 
-  } else if (prevData.model == MYCILA_JSY_MK_193 || prevData.model == MYCILA_JSY_MK_194) {
+  } else if ((id == 0 || id == 1) && (prevData.model == MYCILA_JSY_MK_193 || prevData.model == MYCILA_JSY_MK_194)) {
     int channel = get_jsy_channel_for_shelly_id(id);
     root["total_act_energy"] = prevData.channel(channel).activeEnergy;
     root["total_act_ret_energy"] = prevData.channel(channel).activeEnergyReturned;
+    // old shelly's
+    root["total"] = prevData.channel(channel).activeEnergy;
+    root["total_returned"] = prevData.channel(channel).activeEnergyReturned;
   }
 }
 
@@ -742,10 +757,19 @@ void setup() {
   webServer.on("/rpc/Shelly.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
+    // Shelly Pro EM 50
     EM1GetStatus(0, root["em1:0"].to<JsonObject>());
     EM1GetStatus(1, root["em1:1"].to<JsonObject>());
     EM1DataGetStatus(0, root["em1data:0"].to<JsonObject>());
     EM1DataGetStatus(1, root["em1data:1"].to<JsonObject>());
+    // Shelly Pro 3EM
+    EM1GetStatus(0, root["em:0"].to<JsonObject>());
+    EM1GetStatus(1, root["em:1"].to<JsonObject>());
+    EM1GetStatus(2, root["em:2"].to<JsonObject>());
+    EM1DataGetStatus(0, root["emdata:0"].to<JsonObject>());
+    EM1DataGetStatus(1, root["emdata:1"].to<JsonObject>());
+    EM1DataGetStatus(2, root["emdata:2"].to<JsonObject>());
+    // send response
     response->setLength();
     request->send(response);
   });
@@ -859,9 +883,7 @@ void setup() {
     response->setLength();
     request->send(response);
   });
-
   // API: /rpc
-  // For: Shelly EM & 3EM
   // Returns the list of available API endpoints
   webServer.on("/rpc", HTTP_GET, [](AsyncWebServerRequest* request) {
     AsyncJsonResponse* response = new AsyncJsonResponse();
@@ -890,6 +912,50 @@ void setup() {
       root["/rpc/EM1Data.GetStatus?id=0"] = "Returns the current EM1 data status for channel 1";
       root["/rpc/EM1Data.GetStatus?id=1"] = "Returns the current EM1 data status for channel 2";
     }
+    response->setLength();
+    request->send(response);
+  });
+  // API: /rpc
+  // For old Shelly's
+  // Returns the list of available API endpoints
+  webServer.on("/emeter/0", HTTP_GET, [](AsyncWebServerRequest* request) {
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    EM1GetStatus(0, root);
+    EM1DataGetStatus(0, root);
+    root["is_valid"] = true;
+    response->setLength();
+    request->send(response);
+  });
+  webServer.on("/emeter/1", HTTP_GET, [](AsyncWebServerRequest* request) {
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    EM1GetStatus(1, root);
+    EM1DataGetStatus(1, root);
+    root["is_valid"] = true;
+    response->setLength();
+    request->send(response);
+  });
+  webServer.on("/emeter/2", HTTP_GET, [](AsyncWebServerRequest* request) {
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    EM1GetStatus(2, root);
+    EM1DataGetStatus(2, root);
+    root["is_valid"] = true;
+    response->setLength();
+    request->send(response);
+  });
+  webServer.on("/status", HTTP_GET, [](AsyncWebServerRequest* request) {
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    JsonArray emeters = root["emeters"].to<JsonArray>();
+    EM1GetStatus(0, emeters[0].to<JsonObject>());
+    EM1DataGetStatus(0, emeters[0].as<JsonObject>());
+    EM1GetStatus(1, emeters[1].to<JsonObject>());
+    EM1DataGetStatus(1, emeters[1].as<JsonObject>());
+    EM1GetStatus(2, emeters[2].to<JsonObject>());
+    EM1DataGetStatus(2, emeters[2].as<JsonObject>());
+    root["total_power"] = prevData.aggregate.activePower;
     response->setLength();
     request->send(response);
   });
