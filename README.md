@@ -56,6 +56,14 @@ Naming convention:
 - `MycilaJSYApp-BOARD.FACTORY.bin` — first-time / factory flash image
 - `MycilaJSYApp-BOARD.OTA.bin` — OTA update image
 
+FYI, Supported ESP32 boards with Ethernet support:
+
+- [OLIMEX ESP32-PoE](https://docs.platformio.org/en/stable/boards/espressif32/esp32-poe.html)
+- [OLIMEX ESP32-GATEWAY](https://docs.platformio.org/en/stable/boards/espressif32/esp32-gateway.html)
+- [Wireless-Tag WT32-ETH01 Ethernet Module](https://docs.platformio.org/en/stable/boards/espressif32/wt32-eth01.html)
+- [T-ETH-Lite ESP32 S3](https://github.com/Xinyuan-LilyGO/LilyGO-T-ETH-Series/)
+- [Waveshare ESP32-S3 ETH Board](https://www.waveshare.com/wiki/ESP32-S3-ETH)
+
 ## Installation
 
 First-time flash (factory image):
