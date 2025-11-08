@@ -9,22 +9,23 @@
 #include <HardwareSerial.h>
 #include <Preferences.h>
 
-#include <ArduinoJson.h> // https://github.com/bblanchon/ArduinoJson
+#include <ArduinoJson.h>
 
-#include <AsyncTCP.h>          // https://github.com/ESP32Async/AsyncTCP
-#include <ESPAsyncWebServer.h> // https://github.com/ESP32Async/ESPAsyncWebServer
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 
-#include <ESPDash.h>    // https://github.com/ayushsharma82/ESP-DASH
-#include <ElegantOTA.h> // https://github.com/ayushsharma82/ElegantOTA
-#include <FastCRC32.h>  // https://github.com/RobTillaart/CRC
-#include <WebSerial.h>  // https://github.com/ESP32Async/ESPAsyncWebServer
+#include <ESPDash.h>
+#include <ElegantOTA.h>
+#include <FastCRC32.h>
+#include <WebSerial.h>
 
-#include <MycilaCircularBuffer.h> // https://github.com/mathieucarbou/MycilaUtilities
-#include <MycilaESPConnect.h>     // https://github.com/mathieucarbou/MycilaESPConnect
-#include <MycilaJSY.h>            // https://github.com/mathieucarbou/MycilaJSY
-#include <MycilaSystem.h>         // https://github.com/mathieucarbou/MycilaSystem
-#include <MycilaTaskManager.h>    // https://github.com/mathieucarbou/MycilaTaskManager
-#include <MycilaTime.h>           // https://github.com/mathieucarbou/MycilaUtilities
+#include <MycilaAppInfo.h>
+#include <MycilaCircularBuffer.h>
+#include <MycilaESPConnect.h>
+#include <MycilaJSY.h>
+#include <MycilaSystem.h>
+#include <MycilaTaskManager.h>
+#include <MycilaTime.h>
 
 #include <algorithm>
 #include <string>
@@ -68,6 +69,8 @@ static Mycila::JSY::Data prevData;
 static Mycila::TaskManager coreTaskManager("core");
 static Mycila::TaskManager jsyTaskManager("jsy");
 
+static dash::StatisticValue versionJSYApp(dashboard, "MycilaJSYApp Version");
+static dash::StatisticValue versionJSY(dashboard, "MycilaJSY Version");
 static dash::StatisticValue networkHostname(dashboard, "Network Hostname");
 static dash::StatisticValue networkInterface(dashboard, "Network Interface");
 static dash::StatisticValue networkAPIP(dashboard, "Network Access Point IP Address");
@@ -82,7 +85,6 @@ static dash::StatisticValue networkWiFiSignal(dashboard, "Network WiFi Signal");
 static dash::StatisticValue<float, 2> messageRateCard(dashboard, "UDP Message Rate (msg/s)");
 static dash::StatisticValue<uint32_t> dataRateCard(dashboard, "UDP Data Rate (bytes/s)");
 static dash::StatisticValue uptime(dashboard, "Uptime");
-static dash::StatisticValue version(dashboard, "MycilaJSY Version");
 
 static dash::SeparatorCard sep1(dashboard, "Controls");
 static dash::GenericCard jsyModelCard(dashboard, "Model");
@@ -1046,7 +1048,8 @@ void setup() {
   });
 
   // Dashboard - Static Widgets Values
-  version.setValue(MYCILA_JSY_VERSION);
+  versionJSY.setValue(MYCILA_JSY_VERSION);
+  versionJSYApp.setValue(Mycila::AppInfo.version);
   for (int i = 0; i < MYCILA_GRAPH_POINTS; i++)
     historyX[i] = i - MYCILA_GRAPH_POINTS;
   jsy163ActivePowerHistory.setX(historyX, MYCILA_GRAPH_POINTS);
@@ -1060,7 +1063,7 @@ void setup() {
 
   // Network Manager
   espConnect.setAutoRestart(true);
-  espConnect.setBlocking(CRC16_CCITT_FALSE_REV_IN);
+  espConnect.setBlocking(false);
   espConnect.listen([](Mycila::ESPConnect::State previous, Mycila::ESPConnect::State state) {
     ESP_LOGD(TAG, "NetworkState: %s => %s", espConnect.getStateName(previous), espConnect.getStateName(state));
     switch (state) {

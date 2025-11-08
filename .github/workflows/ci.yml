@@ -127,9 +127,11 @@ jobs:
           pip install --upgrade platformio
           pip install --upgrade intelhex
           pip install --upgrade rich_click
-          pio run -e ${{ matrix.board }}
-          cp .pio/build/${{ matrix.board }}/firmware.bin ./MycilaJSYApp-${{ matrix.board }}.OTA.bin
-          cp .pio/build/${{ matrix.board }}/firmware.factory.bin ./MycilaJSYApp-${{ matrix.board }}.FACTORY.bin
+          ref="${{ github.ref_name }}"
+          ref="${ref//\//}"
+          REF_NAME="${{ github.ref_name }}" pio run -e ${{ matrix.board }}
+          cp .pio/build/${{ matrix.board }}/firmware.bin ./MycilaJSYApp-$ref-${{ matrix.board }}.OTA.bin
+          cp .pio/build/${{ matrix.board }}/firmware.factory.bin ./MycilaJSYApp-$ref-${{ matrix.board }}.FACTORY.bin
 
       - name: Upload
         uses: actions/upload-artifact@v5
