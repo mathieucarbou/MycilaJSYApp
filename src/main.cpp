@@ -75,10 +75,17 @@ static dash::StatisticValue networkHostname(dashboard, "Network Hostname");
 static dash::StatisticValue networkInterface(dashboard, "Network Interface");
 static dash::StatisticValue networkAPIP(dashboard, "Network Access Point IP Address");
 static dash::StatisticValue networkAPMAC(dashboard, "Network Access Point MAC Address");
+#ifdef ESPCONNECT_ETH_SUPPORT
 static dash::StatisticValue networkEthIP(dashboard, "Network Ethernet IP Address");
+static dash::StatisticValue networkEthIPv6Local(dashboard, "Network Ethernet IPv6 Link-Local Address");
+static dash::StatisticValue networkEthIPv6Global(dashboard, "Network Ethernet IPv6 Global Address");
 static dash::StatisticValue networkEthMAC(dashboard, "Network Ethernet MAC Address");
+#endif
 static dash::StatisticValue networkWiFiIP(dashboard, "Network WiFi IP Address");
+static dash::StatisticValue networkWiFiIPv6Local(dashboard, "Network WiFi IPv6 Link-Local Address");
+static dash::StatisticValue networkWiFiIPv6Global(dashboard, "Network WiFi IPv6 Global Address");
 static dash::StatisticValue networkWiFiMAC(dashboard, "Network WiFi MAC Address");
+static dash::StatisticValue networkWiFiBSSID(dashboard, "Network WiFi BSSID");
 static dash::StatisticValue networkWiFiSSID(dashboard, "Network WiFi SSID");
 static dash::StatisticValue networkWiFiRSSI(dashboard, "Network WiFi RSSI");
 static dash::StatisticValue networkWiFiSignal(dashboard, "Network WiFi Signal");
@@ -253,16 +260,54 @@ static Mycila::Task restartTask("Restart", Mycila::Task::Type::ONCE, [](void* pa
 
 static Mycila::Task dashboardTask("Dashboard", [](void* params) {
   Mycila::ESPConnect::Mode mode = espConnect.getMode();
+  if (mode == Mycila::ESPConnect::Mode::AP) {
+    networkInterface.setValue("Access Point");
+    networkAPIP.setValue(espConnect.getIPAddress(Mycila::ESPConnect::Mode::AP).toString().c_str());
+    networkAPMAC.setValue(espConnect.getMACAddress(Mycila::ESPConnect::Mode::AP));
+  } else {
+    // Mode
+    switch (mode) {
+      case Mycila::ESPConnect::Mode::ETH: {
+        networkInterface.setValue("Ethernet");
+        break;
+      }
+      case Mycila::ESPConnect::Mode::STA: {
+        networkInterface.setValue("WiFi");
+        break;
+      }
+      default:
+        networkInterface.setValue("Unknown");
+        break;
+    }
+    // WiFi
+    {
+      networkWiFiIP.setValue(espConnect.getIPAddress(Mycila::ESPConnect::Mode::STA).toString().c_str());
+      auto ipv6Local = espConnect.getLinkLocalIPv6Address(Mycila::ESPConnect::Mode::STA);
+      networkWiFiIPv6Local.setValue(ipv6Local == IN6ADDR_ANY ? "N/A" : ipv6Local.toString().c_str());
+      auto ipv6Global = espConnect.getGlobalIPv6Address(Mycila::ESPConnect::Mode::STA);
+      networkWiFiIPv6Global.setValue(ipv6Global == IN6ADDR_ANY ? "N/A" : ipv6Global.toString().c_str());
+      auto mac = espConnect.getMACAddress(Mycila::ESPConnect::Mode::STA);
+      networkWiFiMAC.setValue(mac.empty() ? std::string("N/A") : mac);
+      networkWiFiSSID.setValue(espConnect.getWiFiSSID());
+      networkWiFiBSSID.setValue(espConnect.getWiFiBSSID());
+      networkWiFiRSSI.setValue((std::to_string(espConnect.getWiFiRSSI()) + " dBm"));
+      networkWiFiSignal.setValue((std::to_string(espConnect.getWiFiSignalQuality()) + " %"));
+    }
+#ifdef ESPCONNECT_ETH_SUPPORT
+    // Ethernet
+    {
+      networkEthIP.setValue(espConnect.getIPAddress(Mycila::ESPConnect::Mode::ETH).toString().c_str());
+      auto ipv6Local = espConnect.getLinkLocalIPv6Address(Mycila::ESPConnect::Mode::ETH);
+      networkEthIPv6Local.setValue(ipv6Local == IN6ADDR_ANY ? "N/A" : ipv6Local.toString().c_str());
+      auto ipv6Global = espConnect.getGlobalIPv6Address(Mycila::ESPConnect::Mode::ETH);
+      networkEthIPv6Global.setValue(ipv6Global == IN6ADDR_ANY ? "N/A" : ipv6Global.toString().c_str());
+      auto mac = espConnect.getMACAddress(Mycila::ESPConnect::Mode::ETH);
+      networkEthMAC.setValue(mac.empty() ? std::string("N/A") : mac);
+    }
+#endif
+  }
 
-  networkAPIP.setValue(espConnect.getIPAddress(Mycila::ESPConnect::Mode::AP).toString().c_str());
-  networkEthIP.setValue(espConnect.getIPAddress(Mycila::ESPConnect::Mode::ETH).toString().c_str());
-  networkInterface.setValue(mode == Mycila::ESPConnect::Mode::AP ? "AP" : (mode == Mycila::ESPConnect::Mode::STA ? "WiFi" : (mode == Mycila::ESPConnect::Mode::ETH ? "Ethernet" : "")));
-  networkWiFiIP.setValue(espConnect.getIPAddress(Mycila::ESPConnect::Mode::STA).toString().c_str());
-  networkWiFiRSSI.setValue((std::to_string(espConnect.getWiFiRSSI()) + " dBm"));
-  networkWiFiSignal.setValue((std::to_string(espConnect.getWiFiSignalQuality()) + " %"));
-  networkWiFiSSID.setValue(espConnect.getWiFiSSID());
   uptime.setValue(Mycila::Time::toDHHMMSS(Mycila::System::getUptime()));
-
   messageRateCard.setValue(messageRate);
   dataRateCard.setValue(dataRate);
   jsy163Publish.setValue(jsy163UdpPublishEnabled);
@@ -1040,10 +1085,7 @@ void setup() {
     if (!changes_only) {
       ESP_LOGI(TAG, "Dashboard refresh requested");
       jsyModelCard.setValue(jsyModel == MYCILA_JSY_MK_UNKNOWN ? "Unknown" : jsy.getModelName());
-      networkAPMAC.setValue(espConnect.getMACAddress(Mycila::ESPConnect::Mode::AP));
-      networkEthMAC.setValue(espConnect.getMACAddress(Mycila::ESPConnect::Mode::ETH).empty() ? std::string("N/A") : espConnect.getMACAddress(Mycila::ESPConnect::Mode::ETH));
       networkHostname.setValue(hostname);
-      networkWiFiMAC.setValue(espConnect.getMACAddress(Mycila::ESPConnect::Mode::STA));
     }
   });
 
