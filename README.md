@@ -203,7 +203,7 @@ The project exposes Shelly-compatible endpoints (Shelly Gen2 API style) so third
   "name": "Mycila JSY App",
   "id": "shellyproem50-40:22:D8:EA:C5:71",
   "mac": "40:22:D8:EA:C5:71",
-  "ver": "15.3.9",
+  "ver": "15.3.10",
   "app": "EM"
 }
 ```
