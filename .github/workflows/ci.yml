@@ -167,7 +167,6 @@ jobs:
         with:
           files: |
             artifacts/*.bin
-            tools/factory.py
       
   dev:
     name: Release
