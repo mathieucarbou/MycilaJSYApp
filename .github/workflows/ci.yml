@@ -134,7 +134,7 @@ jobs:
           cp .pio/build/${{ matrix.board }}/firmware.factory.bin ./MycilaJSYApp-$ref-${{ matrix.board }}.FACTORY.bin
 
       - name: Upload
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.board }}
           if-no-files-found: error
