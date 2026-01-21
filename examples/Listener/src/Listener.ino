@@ -12,6 +12,7 @@
 // #define MYCILA_UDP_MSG_TYPE_JSY_DATA 0x01 // old json format
 #define MYCILA_UDP_MSG_TYPE_JSY_DATA 0x02 // supports all JSY models
 #define MYCILA_UDP_PORT              53964
+#define MYCILA_MAX_UDP_MESSAGE_SIZE  4096
 
 static AsyncUDP udp;
 
@@ -56,7 +57,7 @@ void setup() {
         return;
       }
 
-      if (reassembledMessageRemaining > 4096) { // arbitrary limit to avoid memory exhaustion
+      if (reassembledMessageRemaining > MYCILA_MAX_UDP_MESSAGE_SIZE) { // arbitrary limit to avoid memory exhaustion
         ESP_LOGD("Listener", "Message size too large: %" PRIu32, reassembledMessageRemaining);
         reassembledMessageRemaining = 0;
         return;

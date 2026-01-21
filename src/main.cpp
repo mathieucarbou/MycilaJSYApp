@@ -624,12 +624,15 @@ static void EMDataGetStatus(int id, const JsonObject& root) {
 
 static size_t sendUDP(const JsonObject& json) {
   // buffer[0] == MYCILA_UDP_MSG_TYPE_JSY_DATA (1)
-  // buffer[1] == size_t (4) == messageSize: size of the whole message, which can be split across multiple UDP packets. If this is the case, next packets will have size of 0
+  // buffer[1] == size_t (4) == jsonSize
   // buffer[5] == MsgPack (?)
   // buffer[5 + size] == CRC32 (4)
+
   size_t jsonSize = measureMsgPack(json);
+  
+  // messageSize: size of the MessagePack message, which can be split across multiple UDP packets. If this is the case, next packets will have size of 0
   size_t messageSize = jsonSize + 9;
-  // uint8_t buffer[packetSize];
+
   uint8_t* buffer = new uint8_t[messageSize];
   buffer[0] = MYCILA_UDP_MSG_TYPE_JSY_DATA;
   memcpy(buffer + 1, &jsonSize, 4);
