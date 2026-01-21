@@ -622,6 +622,63 @@ static void EMDataGetStatus(int id, const JsonObject& root) {
   root["total_act_ret"] = prevData.aggregate.activeEnergyReturned;
 }
 
+static size_t sendUDP(const JsonObject& json) {
+  // buffer[0] == MYCILA_UDP_MSG_TYPE_JSY_DATA (1)
+  // buffer[1] == size_t (4) == messageSize: size of the whole message, which can be split across multiple UDP packets. If this is the case, next packets will have size of 0
+  // buffer[5] == MsgPack (?)
+  // buffer[5 + size] == CRC32 (4)
+  size_t jsonSize = measureMsgPack(json);
+  size_t messageSize = jsonSize + 9;
+  // uint8_t buffer[packetSize];
+  uint8_t* buffer = new uint8_t[messageSize];
+  buffer[0] = MYCILA_UDP_MSG_TYPE_JSY_DATA;
+  memcpy(buffer + 1, &jsonSize, 4);
+  serializeMsgPack(json, buffer + 5, jsonSize);
+
+  // crc32
+  FastCRC32 crc32;
+  crc32.add(buffer, jsonSize + 5);
+  uint32_t crc = crc32.calc();
+  memcpy(buffer + jsonSize + 5, &crc, 4);
+
+  // send
+  size_t totalSent = 0;
+  while (totalSent < messageSize) {
+    size_t sent = 0;
+    switch (espConnect.getMode()) {
+      case Mycila::ESPConnect::Mode::AP: {
+        sent = udp.broadcastTo(buffer + totalSent, messageSize - totalSent, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_AP);
+        break;
+      }
+      case Mycila::ESPConnect::Mode::STA: {
+        sent = udp.broadcastTo(buffer + totalSent, messageSize - totalSent, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_STA);
+        break;
+      }
+      case Mycila::ESPConnect::Mode::ETH: {
+        sent = udp.broadcastTo(buffer + totalSent, messageSize - totalSent, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_ETH);
+        break;
+      }
+      default:
+        sent = 0;
+        break;
+    }
+    if (sent == 0) {
+      break;
+    }
+    totalSent += sent;
+  }
+
+  if (totalSent == 0) {
+    ESP_LOGW(TAG, "UDP send failed");
+  } else if (totalSent < messageSize) {
+    ESP_LOGW(TAG, "UDP send incomplete: sent %u of %u bytes", totalSent, messageSize);
+  }
+
+  delete[] buffer;
+
+  return totalSent;
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -1193,8 +1250,7 @@ void setup() {
         break;
     }
 
-    const Mycila::ESPConnect::Mode mode = espConnect.getMode();
-    if (mode == Mycila::ESPConnect::Mode::NONE) {
+    if (espConnect.getMode() == Mycila::ESPConnect::Mode::NONE) {
       messageRate = 0;
       dataRate = 0;
       return;
@@ -1230,55 +1286,17 @@ void setup() {
         break;
     }
 
-    // buffer[0] == MYCILA_UDP_MSG_TYPE_JSY_DATA (1)
-    // buffer[1] == size_t (4)
-    // buffer[5] == MsgPack (?)
-    // buffer[5 + size] == CRC32 (4)
-    size_t size = measureMsgPack(doc);
-    size_t packetSize = size + 9;
-    // uint8_t buffer[packetSize];
-    uint8_t* buffer = new uint8_t[packetSize];
-    buffer[0] = MYCILA_UDP_MSG_TYPE_JSY_DATA;
-    memcpy(buffer + 1, &size, 4);
-    serializeMsgPack(root, buffer + 5, size);
+    size_t totalSent = sendUDP(root);
 
-    // crc32
-    FastCRC32 crc32;
-    crc32.add(buffer, size + 5);
-    uint32_t crc = crc32.calc();
-    memcpy(buffer + size + 5, &crc, 4);
-
-    if (packetSize > CONFIG_TCP_MSS) {
-      ESP_LOGE(TAG, "Packet size too big: %" PRIu32 " / %d bytes", packetSize, CONFIG_TCP_MSS);
-      messageRate = 0;
-      dataRate = 0;
-      return;
+    if (totalSent) {
+      // update rate
+      messageRateBuffer.add(static_cast<float>(esp_timer_get_time() / 1000000.0f));
+      float diff = messageRateBuffer.diff();
+      float count = messageRateBuffer.count();
+      messageRate = diff == 0 ? 0 : count / diff;
+      dataRateBuffer.add(totalSent);
+      dataRate = diff == 0 ? 0 : dataRateBuffer.sum() / diff;
     }
-
-    // send
-    switch (mode) {
-      case Mycila::ESPConnect::Mode::AP:
-        udp.broadcastTo(buffer, packetSize, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_AP);
-        break;
-      case Mycila::ESPConnect::Mode::STA:
-        udp.broadcastTo(buffer, packetSize, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_STA);
-        break;
-      case Mycila::ESPConnect::Mode::ETH:
-        udp.broadcastTo(buffer, packetSize, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_ETH);
-        break;
-      default:
-        break;
-    }
-
-    // update rate
-    messageRateBuffer.add(static_cast<float>(esp_timer_get_time() / 1000000.0f));
-    float diff = messageRateBuffer.diff();
-    float count = messageRateBuffer.count();
-    messageRate = diff == 0 ? 0 : count / diff;
-    dataRateBuffer.add(packetSize);
-    dataRate = diff == 0 ? 0 : dataRateBuffer.sum() / diff;
-
-    delete[] buffer;
   });
 
   jsy.begin(MYCILA_JSY_SERIAL, MYCILA_JSY_RX, MYCILA_JSY_TX);
@@ -1398,6 +1416,38 @@ void setup() {
   ESP_LOGI(TAG, "Started " MYCILA_APP_NAME "!");
 }
 
+// static uint32_t last = 0;
+// // can be put in 1 packet
+// static const char* str_1335 = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+//                               "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+// // will need multiple packets
+// static const char* str_2225 = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+//                               "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+//                               "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+//                               "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+//                               "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+
 void loop() {
   vTaskDelete(NULL);
+
+  // if (millis() - last > 5000) {
+  //   if (random(0, 2) == 0) {
+  //     JsonDocument doc;
+  //     JsonObject root = doc.to<JsonObject>();
+  //     root["txt"] = str_1335;
+  //     size_t sent = sendUDP(root);
+  //     if (sent) {
+  //       ESP_LOGI(TAG, "Sent large UDP packet (%" PRIu32 " bytes)", sent);
+  //     }
+  //   } else {
+  //     JsonDocument doc;
+  //     JsonObject root = doc.to<JsonObject>();
+  //     root["txt"] = str_2225;
+  //     size_t sent = sendUDP(root);
+  //     if (sent) {
+  //       ESP_LOGI(TAG, "Sent very large UDP packet (%" PRIu32 " bytes)", sent);
+  //     }
+  //   }
+  //   last = millis();
+  // }
 }
