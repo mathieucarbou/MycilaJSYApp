@@ -19,6 +19,8 @@ static AsyncUDP udp;
 static uint8_t* reassembledMessage = nullptr;
 static size_t reassembledMessageIndex = 0;
 static size_t reassembledMessageRemaining = 0;
+static uint8_t reassembledMessageMAC[6] = {0};
+static uint32_t lastPacketTime = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -70,20 +72,46 @@ void setup() {
       // allocate new message buffer
       reassembledMessageIndex = 0;
       reassembledMessage = new uint8_t[reassembledMessageRemaining];
+
+      // save sender MAC address
+      packet.remoteMac(reassembledMessageMAC);
+
+      // track the time of last packet
+      lastPacketTime = millis();
     }
 
     // assemble packets
     if (reassembledMessage != nullptr) {
+      // check that the packet comes from the same sender
+      uint8_t mac[6];
+      packet.remoteMac(mac);
+      if (memcmp(mac, reassembledMessageMAC, 6) != 0) {
+        ESP_LOGD("Listener", "[UDP] Discarding packet from different sender. Expected: %02X:%02X:%02X:%02X:%02X:%02X, got %02X:%02X:%02X:%02X:%02X:%02X", reassembledMessageMAC[0], reassembledMessageMAC[1], reassembledMessageMAC[2], reassembledMessageMAC[3], reassembledMessageMAC[4], reassembledMessageMAC[5], mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        return;
+      }
+
       size_t n = std::min(reassembledMessageRemaining, len);
       ESP_LOGD("Listener", "Appending packet of size %" PRIu32, n);
       memcpy(reassembledMessage + reassembledMessageIndex, buffer, n);
       reassembledMessageIndex += n;
       reassembledMessageRemaining -= n;
+
+      // track the time of last packet
+      lastPacketTime = millis();
     }
 
-    // cannot process yet - wait for more packets
-    if (reassembledMessageRemaining)
+    // we are waiting for more packets ?
+    if (reassembledMessageRemaining) {
+      // check for timeout (10 seconds) in case a sender disappears mid-message
+      if (millis() - lastPacketTime > 10000) {
+        ESP_LOGD("Listener", "[UDP] Timeout waiting for more packets from sender: %02X:%02X:%02X:%02X:%02X:%02X", reassembledMessageMAC[0], reassembledMessageMAC[1], reassembledMessageMAC[2], reassembledMessageMAC[3], reassembledMessageMAC[4], reassembledMessageMAC[5]);
+        delete[] reassembledMessage;
+        reassembledMessage = nullptr;
+        reassembledMessageIndex = 0;
+        reassembledMessageRemaining = 0;
+      }
       return;
+    }
 
     // we have finished reassembling packets
     ESP_LOGD("Listener", "Reassembled full message of size %" PRIu32, reassembledMessageIndex);
