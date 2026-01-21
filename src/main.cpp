@@ -629,7 +629,7 @@ static size_t sendUDP(const JsonObject& json) {
   // buffer[5 + size] == CRC32 (4)
 
   size_t jsonSize = measureMsgPack(json);
-  
+
   // messageSize: size of the MessagePack message, which can be split across multiple UDP packets. If this is the case, next packets will have size of 0
   size_t messageSize = jsonSize + 9;
 
