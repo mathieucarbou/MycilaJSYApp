@@ -46,14 +46,15 @@
   #endif
 #endif
 
-#define MYCILA_ADMIN_PASSWORD        ""
-#define MYCILA_ADMIN_USERNAME        "admin"
-#define MYCILA_APP_NAME              "MycilaJSY App"
-#define MYCILA_GRAPH_POINTS          60
-#define MYCILA_UDP_MSG_TYPE_JSY_DATA 0x02 // supports all JSY models
-#define MYCILA_UDP_PORT              53964
-#define MYCILA_UDP_SEND_RATE_WINDOW  20
-#define TAG                          "MycilaJSYApp"
+#define MYCILA_ADMIN_PASSWORD          ""
+#define MYCILA_ADMIN_USERNAME          "admin"
+#define MYCILA_APP_NAME                "MycilaJSY App"
+#define MYCILA_GRAPH_POINTS            60
+#define MYCILA_UDP_MSG_TYPE_JSY_DATA   0x02 // supports all JSY models
+#define MYCILA_UDP_MSG_TYPE_JSY_PHASES 0x03
+#define MYCILA_UDP_PORT                53964
+#define MYCILA_UDP_SEND_RATE_WINDOW    20
+#define TAG                            "MycilaJSYApp"
 
 static AsyncUDP udp;
 static AsyncWebServer webServer(80);
@@ -98,6 +99,7 @@ static dash::GenericCard jsyModelCard(dashboard, "Model");
 static dash::ToggleButtonCard restart(dashboard, "Restart");
 static dash::ToggleButtonCard energyReset(dashboard, "Reset Energy");
 static dash::ToggleButtonCard reset(dashboard, "Factory Reset");
+static dash::ToggleButtonCard jsy333PublishAppart(dashboard, "Publish phases appart");
 
 // JSY-MK-163
 static dash::SeparatorCard jsy163Data(dashboard, "Data");
@@ -212,6 +214,8 @@ static bool jsy194Channel2UdpPublishEnabled = true;
 static bool jsy333PhaseAUdpPublishEnabled = true;
 static bool jsy333PhaseBUdpPublishEnabled = true;
 static bool jsy333PhaseCUdpPublishEnabled = true;
+static bool jsy333PhasesPublishAppart = false;
+
 
 static uint16_t jsyModel = MYCILA_JSY_MK_UNKNOWN;
 
@@ -316,6 +320,7 @@ static Mycila::Task dashboardTask("Dashboard", [](void* params) {
   jsy333PublishA.setValue(jsy333PhaseAUdpPublishEnabled);
   jsy333PublishB.setValue(jsy333PhaseBUdpPublishEnabled);
   jsy333PublishC.setValue(jsy333PhaseCUdpPublishEnabled);
+  jsy333PublishAppart.setValue(jsy333PhasesPublishAppart);
   jsy194ShellyIDChan1.setValue(shellyIDForJSYChannel1);
   jsy194ShellyIDChan2.setValue(shellyIDForJSYChannel2);
 
@@ -622,6 +627,59 @@ static void EMDataGetStatus(int id, const JsonObject& root) {
   root["total_act_ret"] = prevData.aggregate.activeEnergyReturned;
 }
 
+static void sendUdpPacket(uint8_t packetType, const JsonDocument & doc, const JsonObject & root, const Mycila::ESPConnect::Mode mode) {
+  // buffer[0] == packetType (1)
+  // buffer[1] == size_t (4)
+  // buffer[5] == MsgPack (?)
+  // buffer[5 + size] == CRC32 (4)
+  size_t size = measureMsgPack(doc);
+  size_t packetSize = size + 9;
+  // uint8_t buffer[packetSize];
+  uint8_t* buffer = new uint8_t[packetSize];
+  buffer[0] = packetType;
+  memcpy(buffer + 1, &size, 4);
+  serializeMsgPack(root, buffer + 5, size);
+
+  // crc32
+  FastCRC32 crc32;
+  crc32.add(buffer, size + 5);
+  uint32_t crc = crc32.calc();
+  memcpy(buffer + size + 5, &crc, 4);
+
+  if (packetSize > CONFIG_TCP_MSS) {
+    delete[] buffer;
+    ESP_LOGE(TAG, "Packet size too big: %" PRIu32 " / %d bytes", packetSize, CONFIG_TCP_MSS);
+    messageRate = 0;
+    dataRate = 0;
+    return;
+  }
+
+  // send
+  switch (mode) {
+    case Mycila::ESPConnect::Mode::AP:
+      udp.broadcastTo(buffer, packetSize, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_AP);
+      break;
+    case Mycila::ESPConnect::Mode::STA:
+      udp.broadcastTo(buffer, packetSize, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_STA);
+      break;
+    case Mycila::ESPConnect::Mode::ETH:
+      udp.broadcastTo(buffer, packetSize, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_ETH);
+      break;
+    default:
+      break;
+  }
+
+  // update rate
+  messageRateBuffer.add(static_cast<float>(esp_timer_get_time() / 1000000.0f));
+  float diff = messageRateBuffer.diff();
+  float count = messageRateBuffer.count();
+  messageRate = diff == 0 ? 0 : count / diff;
+  dataRateBuffer.add(packetSize);
+  dataRate = diff == 0 ? 0 : dataRateBuffer.sum() / diff;
+
+  delete[] buffer;
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -658,6 +716,7 @@ void setup() {
   jsy333PhaseAUdpPublishEnabled = preferences.getBool("jsy333_a_udp", jsy333PhaseAUdpPublishEnabled);
   jsy333PhaseBUdpPublishEnabled = preferences.getBool("jsy333_b_udp", jsy333PhaseBUdpPublishEnabled);
   jsy333PhaseCUdpPublishEnabled = preferences.getBool("jsy333_c_udp", jsy333PhaseCUdpPublishEnabled);
+  jsy333PhasesPublishAppart = preferences.getBool("jsy333_appart", jsy333PhasesPublishAppart);
   shellyIDForJSYChannel1 = preferences.getUChar("shelly_id_ch1", shellyIDForJSYChannel1);
   shellyIDForJSYChannel2 = preferences.getUChar("shelly_id_ch2", shellyIDForJSYChannel2);
 
@@ -1080,7 +1139,13 @@ void setup() {
     jsy333PublishC.setValue(jsy333PhaseCUdpPublishEnabled);
     dashboard.refresh(jsy333PublishC);
   });
-
+  jsy333PublishAppart.onChange([](bool state) {
+    jsy333PhasesPublishAppart = state;
+    preferences.putBool("jsy333_appart", jsy333PhasesPublishAppart);
+    jsy333PublishAppart.setValue(jsy333PhasesPublishAppart);
+    dashboard.refresh(jsy333PublishAppart);
+  });
+  
   dashboard.onBeforeUpdate([](bool changes_only) {
     if (!changes_only) {
       ESP_LOGI(TAG, "Dashboard refresh requested");
@@ -1200,8 +1265,9 @@ void setup() {
       return;
     }
 
-    JsonDocument doc;
+    JsonDocument doc, doc_phases;
     JsonObject root = doc.to<JsonObject>();
+    JsonObject root_phases;
     jsy.toJson(root);
 
     // filter json according to enabled udp publish
@@ -1225,60 +1291,30 @@ void setup() {
         if (!jsy333PhaseCUdpPublishEnabled) {
           root.remove("phaseC");
         }
+        if (jsy333PhasesPublishAppart) {
+          root_phases = doc_phases.to<JsonObject>();
+          if ( jsy333PhaseAUdpPublishEnabled ) {
+            root_phases["phaseA"] = root["phaseA"];
+            root.remove("phaseA");
+          }
+          if ( jsy333PhaseBUdpPublishEnabled ) {
+            root_phases["phaseB"] = root["phaseB"];
+            root.remove("phaseB");
+          }
+          if ( jsy333PhaseCUdpPublishEnabled ) {
+            root_phases["phaseC"] = root["phaseC"];
+            root.remove("phaseC");
+          }
+        }
         break;
       default:
         break;
     }
 
-    // buffer[0] == MYCILA_UDP_MSG_TYPE_JSY_DATA (1)
-    // buffer[1] == size_t (4)
-    // buffer[5] == MsgPack (?)
-    // buffer[5 + size] == CRC32 (4)
-    size_t size = measureMsgPack(doc);
-    size_t packetSize = size + 9;
-    // uint8_t buffer[packetSize];
-    uint8_t* buffer = new uint8_t[packetSize];
-    buffer[0] = MYCILA_UDP_MSG_TYPE_JSY_DATA;
-    memcpy(buffer + 1, &size, 4);
-    serializeMsgPack(root, buffer + 5, size);
-
-    // crc32
-    FastCRC32 crc32;
-    crc32.add(buffer, size + 5);
-    uint32_t crc = crc32.calc();
-    memcpy(buffer + size + 5, &crc, 4);
-
-    if (packetSize > CONFIG_TCP_MSS) {
-      ESP_LOGE(TAG, "Packet size too big: %" PRIu32 " / %d bytes", packetSize, CONFIG_TCP_MSS);
-      messageRate = 0;
-      dataRate = 0;
-      return;
+    sendUdpPacket(MYCILA_UDP_MSG_TYPE_JSY_DATA, doc, root, mode);
+    if ( jsy333PhasesPublishAppart ) {
+      sendUdpPacket(MYCILA_UDP_MSG_TYPE_JSY_PHASES, doc_phases, root_phases, mode);
     }
-
-    // send
-    switch (mode) {
-      case Mycila::ESPConnect::Mode::AP:
-        udp.broadcastTo(buffer, packetSize, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_AP);
-        break;
-      case Mycila::ESPConnect::Mode::STA:
-        udp.broadcastTo(buffer, packetSize, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_STA);
-        break;
-      case Mycila::ESPConnect::Mode::ETH:
-        udp.broadcastTo(buffer, packetSize, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_ETH);
-        break;
-      default:
-        break;
-    }
-
-    // update rate
-    messageRateBuffer.add(static_cast<float>(esp_timer_get_time() / 1000000.0f));
-    float diff = messageRateBuffer.diff();
-    float count = messageRateBuffer.count();
-    messageRate = diff == 0 ? 0 : count / diff;
-    dataRateBuffer.add(packetSize);
-    dataRate = diff == 0 ? 0 : dataRateBuffer.sum() / diff;
-
-    delete[] buffer;
   });
 
   jsy.begin(MYCILA_JSY_SERIAL, MYCILA_JSY_RX, MYCILA_JSY_TX);
@@ -1338,6 +1374,7 @@ void setup() {
   }
 
   if (jsyModel == MYCILA_JSY_MK_163 || jsyModel == MYCILA_JSY_MK_1031 || jsyModel == MYCILA_JSY_MK_193 || jsyModel == MYCILA_JSY_MK_194 || jsyModel == MYCILA_JSY_MK_UNKNOWN) {
+    dashboard.remove(jsy333PublishAppart);
     dashboard.remove(jsy333PublishA);
     dashboard.remove(jsy333PublishB);
     dashboard.remove(jsy333PublishC);
