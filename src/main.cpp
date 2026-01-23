@@ -46,11 +46,12 @@
   #endif
 #endif
 
-#define MYCILA_ADMIN_PASSWORD        ""
-#define MYCILA_ADMIN_USERNAME        "admin"
-#define MYCILA_APP_NAME              "MycilaJSY App"
-#define MYCILA_GRAPH_POINTS          60
-#define MYCILA_UDP_MSG_TYPE_JSY_DATA 0x02 // supports all JSY models
+#define MYCILA_ADMIN_PASSWORD ""
+#define MYCILA_ADMIN_USERNAME "admin"
+#define MYCILA_APP_NAME       "MycilaJSY App"
+#define MYCILA_GRAPH_POINTS   60
+// #define MYCILA_UDP_MSG_TYPE_JSY_DATA 0x02 // supports all JSY models
+#define MYCILA_UDP_MSG_TYPE_JSY_DATA 0x03 // new format with message ID
 #define MYCILA_UDP_PORT              53964
 #define MYCILA_UDP_SEND_RATE_WINDOW  20
 #define TAG                          "MycilaJSYApp"
@@ -624,25 +625,28 @@ static void EMDataGetStatus(int id, const JsonObject& root) {
 
 static size_t sendUDP(const JsonObject& json) {
   // buffer[0] == MYCILA_UDP_MSG_TYPE_JSY_DATA (1)
-  // buffer[1] == size_t (4) == jsonSize
-  // buffer[5] == MsgPack (?)
-  // buffer[5 + size] == CRC32 (4)
+  // buffer[1] == message ID (4) - uint32_t
+  // buffer[5] == jsonSize (4) - size_t
+  // buffer[9] == MsgPack (?)
+  // buffer[9 + size] == CRC32 (4)
 
-  size_t jsonSize = measureMsgPack(json);
+  const size_t jsonSize = measureMsgPack(json);
+  const uint32_t messageID = micros();
 
-  // messageSize: size of the MessagePack message, which can be split across multiple UDP packets. If this is the case, next packets will have size of 0
-  size_t messageSize = jsonSize + 9;
+  // messageSize: total size of the UDP message, which can be split across multiple UDP packets. If this is the case, next packets will have size of 0
+  const size_t messageSize = jsonSize + 13;
 
   uint8_t* buffer = new uint8_t[messageSize];
   buffer[0] = MYCILA_UDP_MSG_TYPE_JSY_DATA;
-  memcpy(buffer + 1, &jsonSize, 4);
-  serializeMsgPack(json, buffer + 5, jsonSize);
+  memcpy(buffer + 1, &messageID, 4);
+  memcpy(buffer + 5, &jsonSize, 4);
+  serializeMsgPack(json, buffer + 9, jsonSize);
 
   // crc32
   FastCRC32 crc32;
-  crc32.add(buffer, jsonSize + 5);
+  crc32.add(buffer, messageSize - 4);
   uint32_t crc = crc32.calc();
-  memcpy(buffer + jsonSize + 5, &crc, 4);
+  memcpy(buffer + messageSize - 4, &crc, 4);
 
   // send
   size_t totalSent = 0;
