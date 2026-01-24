@@ -64,8 +64,8 @@ static ESPDash dashboard = ESPDash(webServer, "/dashboard", false);
 static Preferences preferences;
 
 static Mycila::JSY jsy;
-static volatile Mycila::JSY::Data jsyData;
-static Mycila::JSY::Data prevData;
+static Mycila::JSY::Data savedJSYData;
+static Mycila::JSY::Metrics savedJSYDataChannels[2] = {0};
 
 static Mycila::TaskManager coreTaskManager("core");
 static Mycila::TaskManager jsyTaskManager("jsy");
@@ -116,9 +116,9 @@ static dash::GenericCard<uint32_t> jsy163ActiveEnergyReturned(dashboard, "Active
 static dash::BarChart<int8_t, int16_t> jsy163ActivePowerHistory(dashboard, "Active Power (W)");
 
 // JSY-MK-193, JSY-MK-194
-static dash::SeparatorCard jsy194Shelly(dashboard, "Shelly Emulation");
-static dash::SliderCard<uint8_t> jsy194ShellyIDChan1(dashboard, "Chan. 1 Shelly ID", 0, 1, 1);
-static dash::SliderCard<uint8_t> jsy194ShellyIDChan2(dashboard, "Chan. 2 Shelly ID", 0, 1, 1);
+static dash::SeparatorCard jsy194ChannelConfig(dashboard, "Channel Configuration");
+static dash::ToggleButtonCard jsy194ChannelSwap(dashboard, "Swap JSY Channels");
+static dash::ToggleButtonCard jsy194ShellySwap(dashboard, "Swap Shelly Meters");
 static dash::SeparatorCard jsy194Data1(dashboard, "Channel 1");
 static dash::ToggleButtonCard jsy194Publish1(dashboard, "UDP Publish");
 static dash::GenericCard<float, 1> jsy194Channel1Frequency(dashboard, "Frequency", "Hz");
@@ -207,13 +207,6 @@ static int16_t power1HistoryY[MYCILA_GRAPH_POINTS] = {0};
 static int16_t power2HistoryY[MYCILA_GRAPH_POINTS] = {0};
 static int16_t power3HistoryY[MYCILA_GRAPH_POINTS] = {0};
 
-static bool jsy163UdpPublishEnabled = true;
-static bool jsy194Channel1UdpPublishEnabled = true;
-static bool jsy194Channel2UdpPublishEnabled = true;
-static bool jsy333PhaseAUdpPublishEnabled = true;
-static bool jsy333PhaseBUdpPublishEnabled = true;
-static bool jsy333PhaseCUdpPublishEnabled = true;
-
 static uint16_t jsyModel = MYCILA_JSY_MK_UNKNOWN;
 
 // circular buffer for msg rate
@@ -223,10 +216,6 @@ static volatile float messageRate = 0;
 // circular buffer for data rate
 static Mycila::CircularBuffer<uint32_t, MYCILA_UDP_SEND_RATE_WINDOW> dataRateBuffer;
 static volatile uint32_t dataRate = 0;
-
-// Shelly Emulation: ID remapping
-static uint8_t shellyIDForJSYChannel1 = 0;
-static uint8_t shellyIDForJSYChannel2 = 1;
 
 static Mycila::Task jsyTask("JSY", [](void* params) { jsy.read(); });
 
@@ -311,28 +300,20 @@ static Mycila::Task dashboardTask("Dashboard", [](void* params) {
   uptime.setValue(Mycila::Time::toDHHMMSS(Mycila::System::getUptime()));
   messageRateCard.setValue(messageRate);
   dataRateCard.setValue(dataRate);
-  jsy163Publish.setValue(jsy163UdpPublishEnabled);
-  jsy194Publish1.setValue(jsy194Channel1UdpPublishEnabled);
-  jsy194Publish2.setValue(jsy194Channel2UdpPublishEnabled);
-  jsy333PublishA.setValue(jsy333PhaseAUdpPublishEnabled);
-  jsy333PublishB.setValue(jsy333PhaseBUdpPublishEnabled);
-  jsy333PublishC.setValue(jsy333PhaseCUdpPublishEnabled);
-  jsy194ShellyIDChan1.setValue(shellyIDForJSYChannel1);
-  jsy194ShellyIDChan2.setValue(shellyIDForJSYChannel2);
 
   switch (jsyModel) {
     case MYCILA_JSY_MK_1031:
     case MYCILA_JSY_MK_163: {
-      jsy163Frequency.setValue(prevData.single().frequency);
-      jsy163Voltage.setValue(prevData.single().voltage);
-      jsy163current.setValue(prevData.single().current);
-      jsy163PowerFactor.setValue(prevData.single().powerFactor);
-      jsy163ActivePower.setValue(prevData.single().activePower);
-      jsy163ApparentPower.setValue(prevData.single().apparentPower);
-      jsy163ReactivePower.setValue(prevData.single().reactivePower);
-      jsy163ActiveEnergy.setValue(prevData.single().activeEnergy);
-      jsy163ActiveEnergyImported.setValue(prevData.single().activeEnergyImported);
-      jsy163ActiveEnergyReturned.setValue(prevData.single().activeEnergyReturned);
+      jsy163Frequency.setValue(savedJSYData.single().frequency);
+      jsy163Voltage.setValue(savedJSYData.single().voltage);
+      jsy163current.setValue(savedJSYData.single().current);
+      jsy163PowerFactor.setValue(savedJSYData.single().powerFactor);
+      jsy163ActivePower.setValue(savedJSYData.single().activePower);
+      jsy163ApparentPower.setValue(savedJSYData.single().apparentPower);
+      jsy163ReactivePower.setValue(savedJSYData.single().reactivePower);
+      jsy163ActiveEnergy.setValue(savedJSYData.single().activeEnergy);
+      jsy163ActiveEnergyImported.setValue(savedJSYData.single().activeEnergyImported);
+      jsy163ActiveEnergyReturned.setValue(savedJSYData.single().activeEnergyReturned);
 
       // shift array
       for (size_t i = 0; i < MYCILA_GRAPH_POINTS - 1; i++) {
@@ -340,7 +321,7 @@ static Mycila::Task dashboardTask("Dashboard", [](void* params) {
       }
 
       // set new value
-      power1HistoryY[MYCILA_GRAPH_POINTS - 1] = round(prevData.phaseA().activePower);
+      power1HistoryY[MYCILA_GRAPH_POINTS - 1] = round(savedJSYData.phaseA().activePower);
 
       // update charts
       jsy163ActivePowerHistory.setY(power1HistoryY, MYCILA_GRAPH_POINTS);
@@ -349,27 +330,27 @@ static Mycila::Task dashboardTask("Dashboard", [](void* params) {
     }
     case MYCILA_JSY_MK_193:
     case MYCILA_JSY_MK_194: {
-      jsy194Channel1Frequency.setValue(prevData.channel1().frequency);
-      jsy194Channel1Voltage.setValue(prevData.channel1().voltage);
-      jsy194Channel1Current.setValue(prevData.channel1().current);
-      jsy194Channel1PowerFactor.setValue(prevData.channel1().powerFactor);
-      jsy194Channel1ActivePower.setValue(prevData.channel1().activePower);
-      jsy194Channel1ApparentPower.setValue(prevData.channel1().apparentPower);
-      jsy194Channel1ReactivePower.setValue(prevData.channel1().reactivePower);
-      jsy194Channel1ActiveEnergy.setValue(prevData.channel1().activeEnergy);
-      jsy194Channel1ActiveEnergyImported.setValue(prevData.channel1().activeEnergyImported);
-      jsy194Channel1ActiveEnergyReturned.setValue(prevData.channel1().activeEnergyReturned);
+      jsy194Channel1Frequency.setValue(savedJSYDataChannels[0].frequency);
+      jsy194Channel1Voltage.setValue(savedJSYDataChannels[0].voltage);
+      jsy194Channel1Current.setValue(savedJSYDataChannels[0].current);
+      jsy194Channel1PowerFactor.setValue(savedJSYDataChannels[0].powerFactor);
+      jsy194Channel1ActivePower.setValue(savedJSYDataChannels[0].activePower);
+      jsy194Channel1ApparentPower.setValue(savedJSYDataChannels[0].apparentPower);
+      jsy194Channel1ReactivePower.setValue(savedJSYDataChannels[0].reactivePower);
+      jsy194Channel1ActiveEnergy.setValue(savedJSYDataChannels[0].activeEnergy);
+      jsy194Channel1ActiveEnergyImported.setValue(savedJSYDataChannels[0].activeEnergyImported);
+      jsy194Channel1ActiveEnergyReturned.setValue(savedJSYDataChannels[0].activeEnergyReturned);
 
-      jsy194Channel2Frequency.setValue(prevData.channel2().frequency);
-      jsy194Channel2Voltage.setValue(prevData.channel2().voltage);
-      jsy194Channel2Current.setValue(prevData.channel2().current);
-      jsy194Channel2PowerFactor.setValue(prevData.channel2().powerFactor);
-      jsy194Channel2ActivePower.setValue(prevData.channel2().activePower);
-      jsy194Channel2ApparentPower.setValue(prevData.channel2().apparentPower);
-      jsy194Channel2ReactivePower.setValue(prevData.channel2().reactivePower);
-      jsy194Channel2ActiveEnergy.setValue(prevData.channel2().activeEnergy);
-      jsy194Channel2ActiveEnergyImported.setValue(prevData.channel2().activeEnergyImported);
-      jsy194Channel2ActiveEnergyReturned.setValue(prevData.channel2().activeEnergyReturned);
+      jsy194Channel2Frequency.setValue(savedJSYDataChannels[1].frequency);
+      jsy194Channel2Voltage.setValue(savedJSYDataChannels[1].voltage);
+      jsy194Channel2Current.setValue(savedJSYDataChannels[1].current);
+      jsy194Channel2PowerFactor.setValue(savedJSYDataChannels[1].powerFactor);
+      jsy194Channel2ActivePower.setValue(savedJSYDataChannels[1].activePower);
+      jsy194Channel2ApparentPower.setValue(savedJSYDataChannels[1].apparentPower);
+      jsy194Channel2ReactivePower.setValue(savedJSYDataChannels[1].reactivePower);
+      jsy194Channel2ActiveEnergy.setValue(savedJSYDataChannels[1].activeEnergy);
+      jsy194Channel2ActiveEnergyImported.setValue(savedJSYDataChannels[1].activeEnergyImported);
+      jsy194Channel2ActiveEnergyReturned.setValue(savedJSYDataChannels[1].activeEnergyReturned);
 
       // shift array
       for (size_t i = 0; i < MYCILA_GRAPH_POINTS - 1; i++) {
@@ -378,8 +359,8 @@ static Mycila::Task dashboardTask("Dashboard", [](void* params) {
       }
 
       // set new value
-      power1HistoryY[MYCILA_GRAPH_POINTS - 1] = round(prevData.channel1().activePower);
-      power2HistoryY[MYCILA_GRAPH_POINTS - 1] = round(prevData.channel2().activePower);
+      power1HistoryY[MYCILA_GRAPH_POINTS - 1] = round(savedJSYDataChannels[0].activePower);
+      power2HistoryY[MYCILA_GRAPH_POINTS - 1] = round(savedJSYDataChannels[1].activePower);
 
       // update charts
       jsy194Channel1ActivePowerHistory.setY(power1HistoryY, MYCILA_GRAPH_POINTS);
@@ -388,50 +369,50 @@ static Mycila::Task dashboardTask("Dashboard", [](void* params) {
       break;
     }
     case MYCILA_JSY_MK_333: {
-      jsy333PhaseAFrequency.setValue(prevData.phaseA().frequency);
-      jsy333PhaseAVoltage.setValue(prevData.phaseA().voltage);
-      jsy333PhaseACurrent.setValue(prevData.phaseA().current);
-      jsy333PhaseAPowerFactor.setValue(prevData.phaseA().powerFactor);
-      jsy333PhaseAActivePower.setValue(prevData.phaseA().activePower);
-      jsy333PhaseAApparentPower.setValue(prevData.phaseA().apparentPower);
-      jsy333PhaseAReactivePower.setValue(prevData.phaseA().reactivePower);
-      jsy333PhaseAActiveEnergy.setValue(prevData.phaseA().activeEnergy);
-      jsy333PhaseAActiveEnergyImported.setValue(prevData.phaseA().activeEnergyImported);
-      jsy333PhaseAActiveEnergyReturned.setValue(prevData.phaseA().activeEnergyReturned);
-      jsy333PhaseAReactiveEnergy.setValue(prevData.phaseA().reactiveEnergy);
-      jsy333PhaseAReactiveEnergyImported.setValue(prevData.phaseA().reactiveEnergyImported);
-      jsy333PhaseAReactiveEnergyReturned.setValue(prevData.phaseA().reactiveEnergyReturned);
-      jsy333PhaseAApparentEnergy.setValue(prevData.phaseA().apparentEnergy);
+      jsy333PhaseAFrequency.setValue(savedJSYData.phaseA().frequency);
+      jsy333PhaseAVoltage.setValue(savedJSYData.phaseA().voltage);
+      jsy333PhaseACurrent.setValue(savedJSYData.phaseA().current);
+      jsy333PhaseAPowerFactor.setValue(savedJSYData.phaseA().powerFactor);
+      jsy333PhaseAActivePower.setValue(savedJSYData.phaseA().activePower);
+      jsy333PhaseAApparentPower.setValue(savedJSYData.phaseA().apparentPower);
+      jsy333PhaseAReactivePower.setValue(savedJSYData.phaseA().reactivePower);
+      jsy333PhaseAActiveEnergy.setValue(savedJSYData.phaseA().activeEnergy);
+      jsy333PhaseAActiveEnergyImported.setValue(savedJSYData.phaseA().activeEnergyImported);
+      jsy333PhaseAActiveEnergyReturned.setValue(savedJSYData.phaseA().activeEnergyReturned);
+      jsy333PhaseAReactiveEnergy.setValue(savedJSYData.phaseA().reactiveEnergy);
+      jsy333PhaseAReactiveEnergyImported.setValue(savedJSYData.phaseA().reactiveEnergyImported);
+      jsy333PhaseAReactiveEnergyReturned.setValue(savedJSYData.phaseA().reactiveEnergyReturned);
+      jsy333PhaseAApparentEnergy.setValue(savedJSYData.phaseA().apparentEnergy);
 
-      jsy333PhaseBFrequency.setValue(prevData.phaseB().frequency);
-      jsy333PhaseBVoltage.setValue(prevData.phaseB().voltage);
-      jsy333PhaseBCurrent.setValue(prevData.phaseB().current);
-      jsy333PhaseBPowerFactor.setValue(prevData.phaseB().powerFactor);
-      jsy333PhaseBActivePower.setValue(prevData.phaseB().activePower);
-      jsy333PhaseBApparentPower.setValue(prevData.phaseB().apparentPower);
-      jsy333PhaseBReactivePower.setValue(prevData.phaseB().reactivePower);
-      jsy333PhaseBActiveEnergy.setValue(prevData.phaseB().activeEnergy);
-      jsy333PhaseBActiveEnergyImported.setValue(prevData.phaseB().activeEnergyImported);
-      jsy333PhaseBActiveEnergyReturned.setValue(prevData.phaseB().activeEnergyReturned);
-      jsy333PhaseBReactiveEnergy.setValue(prevData.phaseB().reactiveEnergy);
-      jsy333PhaseBReactiveEnergyImported.setValue(prevData.phaseB().reactiveEnergyImported);
-      jsy333PhaseBReactiveEnergyReturned.setValue(prevData.phaseB().reactiveEnergyReturned);
-      jsy333PhaseBApparentEnergy.setValue(prevData.phaseB().apparentEnergy);
+      jsy333PhaseBFrequency.setValue(savedJSYData.phaseB().frequency);
+      jsy333PhaseBVoltage.setValue(savedJSYData.phaseB().voltage);
+      jsy333PhaseBCurrent.setValue(savedJSYData.phaseB().current);
+      jsy333PhaseBPowerFactor.setValue(savedJSYData.phaseB().powerFactor);
+      jsy333PhaseBActivePower.setValue(savedJSYData.phaseB().activePower);
+      jsy333PhaseBApparentPower.setValue(savedJSYData.phaseB().apparentPower);
+      jsy333PhaseBReactivePower.setValue(savedJSYData.phaseB().reactivePower);
+      jsy333PhaseBActiveEnergy.setValue(savedJSYData.phaseB().activeEnergy);
+      jsy333PhaseBActiveEnergyImported.setValue(savedJSYData.phaseB().activeEnergyImported);
+      jsy333PhaseBActiveEnergyReturned.setValue(savedJSYData.phaseB().activeEnergyReturned);
+      jsy333PhaseBReactiveEnergy.setValue(savedJSYData.phaseB().reactiveEnergy);
+      jsy333PhaseBReactiveEnergyImported.setValue(savedJSYData.phaseB().reactiveEnergyImported);
+      jsy333PhaseBReactiveEnergyReturned.setValue(savedJSYData.phaseB().reactiveEnergyReturned);
+      jsy333PhaseBApparentEnergy.setValue(savedJSYData.phaseB().apparentEnergy);
 
-      jsy333PhaseCFrequency.setValue(prevData.phaseC().frequency);
-      jsy333PhaseCVoltage.setValue(prevData.phaseC().voltage);
-      jsy333PhaseCCurrent.setValue(prevData.phaseC().current);
-      jsy333PhaseCPowerFactor.setValue(prevData.phaseC().powerFactor);
-      jsy333PhaseCActivePower.setValue(prevData.phaseC().activePower);
-      jsy333PhaseCApparentPower.setValue(prevData.phaseC().apparentPower);
-      jsy333PhaseCReactivePower.setValue(prevData.phaseC().reactivePower);
-      jsy333PhaseCActiveEnergy.setValue(prevData.phaseC().activeEnergy);
-      jsy333PhaseCActiveEnergyImported.setValue(prevData.phaseC().activeEnergyImported);
-      jsy333PhaseCActiveEnergyReturned.setValue(prevData.phaseC().activeEnergyReturned);
-      jsy333PhaseCReactiveEnergy.setValue(prevData.phaseC().reactiveEnergy);
-      jsy333PhaseCReactiveEnergyImported.setValue(prevData.phaseC().reactiveEnergyImported);
-      jsy333PhaseCReactiveEnergyReturned.setValue(prevData.phaseC().reactiveEnergyReturned);
-      jsy333PhaseCApparentEnergy.setValue(prevData.phaseC().apparentEnergy);
+      jsy333PhaseCFrequency.setValue(savedJSYData.phaseC().frequency);
+      jsy333PhaseCVoltage.setValue(savedJSYData.phaseC().voltage);
+      jsy333PhaseCCurrent.setValue(savedJSYData.phaseC().current);
+      jsy333PhaseCPowerFactor.setValue(savedJSYData.phaseC().powerFactor);
+      jsy333PhaseCActivePower.setValue(savedJSYData.phaseC().activePower);
+      jsy333PhaseCApparentPower.setValue(savedJSYData.phaseC().apparentPower);
+      jsy333PhaseCReactivePower.setValue(savedJSYData.phaseC().reactivePower);
+      jsy333PhaseCActiveEnergy.setValue(savedJSYData.phaseC().activeEnergy);
+      jsy333PhaseCActiveEnergyImported.setValue(savedJSYData.phaseC().activeEnergyImported);
+      jsy333PhaseCActiveEnergyReturned.setValue(savedJSYData.phaseC().activeEnergyReturned);
+      jsy333PhaseCReactiveEnergy.setValue(savedJSYData.phaseC().reactiveEnergy);
+      jsy333PhaseCReactiveEnergyImported.setValue(savedJSYData.phaseC().reactiveEnergyImported);
+      jsy333PhaseCReactiveEnergyReturned.setValue(savedJSYData.phaseC().reactiveEnergyReturned);
+      jsy333PhaseCApparentEnergy.setValue(savedJSYData.phaseC().apparentEnergy);
 
       // shift array
       for (size_t i = 0; i < MYCILA_GRAPH_POINTS - 1; i++) {
@@ -441,9 +422,9 @@ static Mycila::Task dashboardTask("Dashboard", [](void* params) {
       }
 
       // set new value
-      power1HistoryY[MYCILA_GRAPH_POINTS - 1] = round(prevData.phaseA().activePower);
-      power2HistoryY[MYCILA_GRAPH_POINTS - 1] = round(prevData.phaseB().activePower);
-      power3HistoryY[MYCILA_GRAPH_POINTS - 1] = round(prevData.phaseC().activePower);
+      power1HistoryY[MYCILA_GRAPH_POINTS - 1] = round(savedJSYData.phaseA().activePower);
+      power2HistoryY[MYCILA_GRAPH_POINTS - 1] = round(savedJSYData.phaseB().activePower);
+      power3HistoryY[MYCILA_GRAPH_POINTS - 1] = round(savedJSYData.phaseC().activePower);
 
       // update charts
       jsy333PhaseAActivePowerHistory.setY(power1HistoryY, MYCILA_GRAPH_POINTS);
@@ -475,11 +456,11 @@ static int get_id_param(const AsyncWebServerRequest* request) {
   // JSY-MK-163 and JSY1031 => id must be 0
   // JSY-MK-333 => id can be 0, 1 or 2
   // others, 2 channels => id must be 0 or 1
-  if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
+  if (savedJSYData.model == MYCILA_JSY_MK_163 || savedJSYData.model == MYCILA_JSY_MK_1031) {
     return id == 0 ? 0 : -1;
   }
   // JSY-MK-333
-  if (prevData.model == MYCILA_JSY_MK_333) {
+  if (savedJSYData.model == MYCILA_JSY_MK_333) {
     return id < 0 || id > 2 ? -1 : id;
   }
   // JSY-MK-194
@@ -491,23 +472,17 @@ static int get_id_param(const AsyncWebServerRequest* request) {
 }
 
 static int get_jsy_channel_for_shelly_id(int shellyID) {
-  if (shellyID == shellyIDForJSYChannel1) {
-    return 0;
-  } else if (shellyID == shellyIDForJSYChannel2) {
-    return 1;
-  } else {
-    return -1;
-  }
+  return jsy194ShellySwap.value() ? (shellyID == 0 ? 1 : 0) : shellyID;
 }
 
 // Shelly.GetDeviceInfo
 
 static void ShellyGetDeviceInfo(const JsonObject& root) {
   root["name"] = "Mycila JSY App";
-  root["id"] = (prevData.model == MYCILA_JSY_MK_333 ? "shellypro3em-" : "shellyproem50-") + espConnect.getMACAddress();
+  root["id"] = (savedJSYData.model == MYCILA_JSY_MK_333 ? "shellypro3em-" : "shellyproem50-") + espConnect.getMACAddress();
   root["mac"] = espConnect.getMACAddress();
   root["ver"] = MYCILA_JSY_VERSION;
-  root["app"] = prevData.model == MYCILA_JSY_MK_333 ? "3EM" : "EM";
+  root["app"] = savedJSYData.model == MYCILA_JSY_MK_333 ? "3EM" : "EM";
 }
 
 // EM1.GetStatus
@@ -515,36 +490,36 @@ static void ShellyGetDeviceInfo(const JsonObject& root) {
 static void EM1GetStatus(int id, const JsonObject& root) {
   root["id"] = id;
 
-  if (id == 0 && (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031)) {
-    root["voltage"] = prevData.single().voltage;
-    root["current"] = prevData.single().current;
-    root["act_power"] = prevData.single().activePower;
-    root["aprt_power"] = prevData.single().apparentPower;
-    root["pf"] = prevData.single().powerFactor;
-    root["freq"] = prevData.single().frequency;
+  if (id == 0 && (savedJSYData.model == MYCILA_JSY_MK_163 || savedJSYData.model == MYCILA_JSY_MK_1031)) {
+    root["voltage"] = savedJSYData.single().voltage;
+    root["current"] = savedJSYData.single().current;
+    root["act_power"] = savedJSYData.single().activePower;
+    root["aprt_power"] = savedJSYData.single().apparentPower;
+    root["pf"] = savedJSYData.single().powerFactor;
+    root["freq"] = savedJSYData.single().frequency;
     // old shelly's
-    root["power"] = prevData.single().activePower;
+    root["power"] = savedJSYData.single().activePower;
 
-  } else if ((id == 0 || id == 1 || id == 2) && prevData.model == MYCILA_JSY_MK_333) {
-    root["voltage"] = prevData.phase(id).voltage;
-    root["current"] = prevData.phase(id).current;
-    root["act_power"] = prevData.phase(id).activePower;
-    root["aprt_power"] = prevData.phase(id).apparentPower;
-    root["pf"] = prevData.phase(id).powerFactor;
-    root["freq"] = prevData.phase(id).frequency;
+  } else if ((id == 0 || id == 1 || id == 2) && savedJSYData.model == MYCILA_JSY_MK_333) {
+    root["voltage"] = savedJSYData.phase(id).voltage;
+    root["current"] = savedJSYData.phase(id).current;
+    root["act_power"] = savedJSYData.phase(id).activePower;
+    root["aprt_power"] = savedJSYData.phase(id).apparentPower;
+    root["pf"] = savedJSYData.phase(id).powerFactor;
+    root["freq"] = savedJSYData.phase(id).frequency;
     // old shelly's
-    root["power"] = prevData.phase(id).activePower;
+    root["power"] = savedJSYData.phase(id).activePower;
 
-  } else if ((id == 0 || id == 1) && (prevData.model == MYCILA_JSY_MK_193 || prevData.model == MYCILA_JSY_MK_194)) {
+  } else if ((id == 0 || id == 1) && (savedJSYData.model == MYCILA_JSY_MK_193 || savedJSYData.model == MYCILA_JSY_MK_194)) {
     int channel = get_jsy_channel_for_shelly_id(id);
-    root["voltage"] = prevData.channel(channel).voltage;
-    root["current"] = prevData.channel(channel).current;
-    root["act_power"] = prevData.channel(channel).activePower;
-    root["aprt_power"] = prevData.channel(channel).apparentPower;
-    root["pf"] = prevData.channel(channel).powerFactor;
-    root["freq"] = prevData.channel(channel).frequency;
+    root["voltage"] = savedJSYDataChannels[channel].voltage;
+    root["current"] = savedJSYDataChannels[channel].current;
+    root["act_power"] = savedJSYDataChannels[channel].activePower;
+    root["aprt_power"] = savedJSYDataChannels[channel].apparentPower;
+    root["pf"] = savedJSYDataChannels[channel].powerFactor;
+    root["freq"] = savedJSYDataChannels[channel].frequency;
     // old shelly's
-    root["power"] = prevData.channel(channel).activePower;
+    root["power"] = savedJSYDataChannels[channel].activePower;
   }
 
   root["calibration"] = "factory";
@@ -555,27 +530,27 @@ static void EM1GetStatus(int id, const JsonObject& root) {
 static void EM1DataGetStatus(int id, const JsonObject& root) {
   root["id"] = id;
 
-  if (id == 0 && (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031)) {
-    root["total_act_energy"] = prevData.single().activeEnergy;
-    root["total_act_ret_energy"] = prevData.single().activeEnergyReturned;
+  if (id == 0 && (savedJSYData.model == MYCILA_JSY_MK_163 || savedJSYData.model == MYCILA_JSY_MK_1031)) {
+    root["total_act_energy"] = savedJSYData.single().activeEnergy;
+    root["total_act_ret_energy"] = savedJSYData.single().activeEnergyReturned;
     // old shelly's
-    root["total"] = prevData.single().activeEnergy;
-    root["total_returned"] = prevData.single().activeEnergyReturned;
+    root["total"] = savedJSYData.single().activeEnergy;
+    root["total_returned"] = savedJSYData.single().activeEnergyReturned;
 
-  } else if ((id == 0 || id == 1 || id == 2) && prevData.model == MYCILA_JSY_MK_333) {
-    root["total_act_energy"] = prevData.phase(id).activeEnergy;
-    root["total_act_ret_energy"] = prevData.phase(id).activeEnergyReturned;
+  } else if ((id == 0 || id == 1 || id == 2) && savedJSYData.model == MYCILA_JSY_MK_333) {
+    root["total_act_energy"] = savedJSYData.phase(id).activeEnergy;
+    root["total_act_ret_energy"] = savedJSYData.phase(id).activeEnergyReturned;
     // old shelly's
-    root["total"] = prevData.phase(id).activeEnergy;
-    root["total_returned"] = prevData.phase(id).activeEnergyReturned;
+    root["total"] = savedJSYData.phase(id).activeEnergy;
+    root["total_returned"] = savedJSYData.phase(id).activeEnergyReturned;
 
-  } else if ((id == 0 || id == 1) && (prevData.model == MYCILA_JSY_MK_193 || prevData.model == MYCILA_JSY_MK_194)) {
+  } else if ((id == 0 || id == 1) && (savedJSYData.model == MYCILA_JSY_MK_193 || savedJSYData.model == MYCILA_JSY_MK_194)) {
     int channel = get_jsy_channel_for_shelly_id(id);
-    root["total_act_energy"] = prevData.channel(channel).activeEnergy;
-    root["total_act_ret_energy"] = prevData.channel(channel).activeEnergyReturned;
+    root["total_act_energy"] = savedJSYDataChannels[channel].activeEnergy;
+    root["total_act_ret_energy"] = savedJSYDataChannels[channel].activeEnergyReturned;
     // old shelly's
-    root["total"] = prevData.channel(channel).activeEnergy;
-    root["total_returned"] = prevData.channel(channel).activeEnergyReturned;
+    root["total"] = savedJSYDataChannels[channel].activeEnergy;
+    root["total_returned"] = savedJSYDataChannels[channel].activeEnergyReturned;
   }
 }
 
@@ -583,28 +558,28 @@ static void EM1DataGetStatus(int id, const JsonObject& root) {
 
 static void EMGetStatus(int id, const JsonObject& root) {
   root["id"] = id;
-  root["a_current"] = prevData.phaseA().current;
-  root["a_voltage"] = prevData.phaseA().voltage;
-  root["a_act_power"] = prevData.phaseA().activePower;
-  root["a_aprt_power"] = prevData.phaseA().apparentPower;
-  root["a_pf"] = prevData.phaseA().powerFactor;
-  root["a_freq"] = prevData.phaseA().frequency;
-  root["b_current"] = prevData.phaseB().current;
-  root["b_voltage"] = prevData.phaseB().voltage;
-  root["b_act_power"] = prevData.phaseB().activePower;
-  root["b_aprt_power"] = prevData.phaseB().apparentPower;
-  root["b_pf"] = prevData.phaseB().powerFactor;
-  root["b_freq"] = prevData.phaseB().frequency;
-  root["c_current"] = prevData.phaseC().current;
-  root["c_voltage"] = prevData.phaseC().voltage;
-  root["c_active_power"] = prevData.phaseC().activePower;
-  root["c_aprt_power"] = prevData.phaseC().apparentPower;
-  root["c_pf"] = prevData.phaseC().powerFactor;
-  root["c_freq"] = prevData.phaseC().frequency;
+  root["a_current"] = savedJSYData.phaseA().current;
+  root["a_voltage"] = savedJSYData.phaseA().voltage;
+  root["a_act_power"] = savedJSYData.phaseA().activePower;
+  root["a_aprt_power"] = savedJSYData.phaseA().apparentPower;
+  root["a_pf"] = savedJSYData.phaseA().powerFactor;
+  root["a_freq"] = savedJSYData.phaseA().frequency;
+  root["b_current"] = savedJSYData.phaseB().current;
+  root["b_voltage"] = savedJSYData.phaseB().voltage;
+  root["b_act_power"] = savedJSYData.phaseB().activePower;
+  root["b_aprt_power"] = savedJSYData.phaseB().apparentPower;
+  root["b_pf"] = savedJSYData.phaseB().powerFactor;
+  root["b_freq"] = savedJSYData.phaseB().frequency;
+  root["c_current"] = savedJSYData.phaseC().current;
+  root["c_voltage"] = savedJSYData.phaseC().voltage;
+  root["c_active_power"] = savedJSYData.phaseC().activePower;
+  root["c_aprt_power"] = savedJSYData.phaseC().apparentPower;
+  root["c_pf"] = savedJSYData.phaseC().powerFactor;
+  root["c_freq"] = savedJSYData.phaseC().frequency;
   root["n_current"] = 0;
-  root["total_current"] = prevData.aggregate.current;
-  root["total_act_power"] = prevData.aggregate.activePower;
-  root["total_aprt_power"] = prevData.aggregate.apparentPower;
+  root["total_current"] = savedJSYData.aggregate.current;
+  root["total_act_power"] = savedJSYData.aggregate.activePower;
+  root["total_aprt_power"] = savedJSYData.aggregate.apparentPower;
   root["user_calibrated_phase"] = JsonArray();
   root["errors"] = JsonArray();
 }
@@ -613,14 +588,14 @@ static void EMGetStatus(int id, const JsonObject& root) {
 
 static void EMDataGetStatus(int id, const JsonObject& root) {
   root["id"] = id;
-  root["a_total_act_energy"] = prevData.phaseA().activeEnergy;
-  root["a_total_act_ret_energy"] = prevData.phaseA().activeEnergyReturned;
-  root["b_total_act_energy"] = prevData.phaseB().activeEnergy;
-  root["b_total_act_ret_energy"] = prevData.phaseB().activeEnergyReturned;
-  root["c_total_act_energy"] = prevData.phaseC().activeEnergy;
-  root["c_total_act_ret_energy"] = prevData.phaseC().activeEnergyReturned;
-  root["total_act"] = prevData.aggregate.activeEnergy;
-  root["total_act_ret"] = prevData.aggregate.activeEnergyReturned;
+  root["a_total_act_energy"] = savedJSYData.phaseA().activeEnergy;
+  root["a_total_act_ret_energy"] = savedJSYData.phaseA().activeEnergyReturned;
+  root["b_total_act_energy"] = savedJSYData.phaseB().activeEnergy;
+  root["b_total_act_ret_energy"] = savedJSYData.phaseB().activeEnergyReturned;
+  root["c_total_act_energy"] = savedJSYData.phaseC().activeEnergy;
+  root["c_total_act_ret_energy"] = savedJSYData.phaseC().activeEnergyReturned;
+  root["total_act"] = savedJSYData.aggregate.activeEnergy;
+  root["total_act_ret"] = savedJSYData.aggregate.activeEnergyReturned;
 }
 
 static size_t sendUDP(const JsonObject& json) {
@@ -716,14 +691,14 @@ void setup() {
 
   // config
   preferences.begin("jsy", false);
-  jsy163UdpPublishEnabled = preferences.getBool("jsy163_udp", jsy163UdpPublishEnabled);
-  jsy194Channel1UdpPublishEnabled = preferences.getBool("jsy194_ch1_udp", jsy194Channel1UdpPublishEnabled);
-  jsy194Channel2UdpPublishEnabled = preferences.getBool("jsy194_ch2_udp", jsy194Channel2UdpPublishEnabled);
-  jsy333PhaseAUdpPublishEnabled = preferences.getBool("jsy333_a_udp", jsy333PhaseAUdpPublishEnabled);
-  jsy333PhaseBUdpPublishEnabled = preferences.getBool("jsy333_b_udp", jsy333PhaseBUdpPublishEnabled);
-  jsy333PhaseCUdpPublishEnabled = preferences.getBool("jsy333_c_udp", jsy333PhaseCUdpPublishEnabled);
-  shellyIDForJSYChannel1 = preferences.getUChar("shelly_id_ch1", shellyIDForJSYChannel1);
-  shellyIDForJSYChannel2 = preferences.getUChar("shelly_id_ch2", shellyIDForJSYChannel2);
+  jsy163Publish.setValue(preferences.getBool("jsy163_udp", true));
+  jsy194Publish1.setValue(preferences.getBool("jsy194_ch1_udp", true));
+  jsy194Publish2.setValue(preferences.getBool("jsy194_ch2_udp", true));
+  jsy333PublishA.setValue(preferences.getBool("jsy333_a_udp", true));
+  jsy333PublishB.setValue(preferences.getBool("jsy333_b_udp", true));
+  jsy333PublishC.setValue(preferences.getBool("jsy333_c_udp", true));
+  jsy194ChannelSwap.setValue(preferences.getBool("jsy194_ch_swap", false));
+  jsy194ShellySwap.setValue(preferences.getBool("jsy194_sh_swap", false));
 
   // tasks
   dashboardTask.setEnabledWhen([]() { return espConnect.isConnected() && !dashboard.isAsyncAccessInProgress(); });
@@ -776,38 +751,32 @@ void setup() {
     const AsyncWebParameter* enableParam = request->getParam("switch");
     if (enableParam != nullptr) {
       bool enabled = enableParam->value() == "on";
-      jsy163UdpPublishEnabled = enabled;
-      jsy194Channel1UdpPublishEnabled = enabled;
-      jsy194Channel2UdpPublishEnabled = enabled;
-      jsy333PhaseAUdpPublishEnabled = enabled;
-      jsy333PhaseBUdpPublishEnabled = enabled;
-      jsy333PhaseCUdpPublishEnabled = enabled;
-      preferences.putBool("jsy163_udp", jsy163UdpPublishEnabled);
-      preferences.putBool("jsy194_ch1_udp", jsy194Channel1UdpPublishEnabled);
-      preferences.putBool("jsy194_ch2_udp", jsy194Channel2UdpPublishEnabled);
-      preferences.putBool("jsy333_a_udp", jsy333PhaseAUdpPublishEnabled);
-      preferences.putBool("jsy333_b_udp", jsy333PhaseBUdpPublishEnabled);
-      preferences.putBool("jsy333_c_udp", jsy333PhaseCUdpPublishEnabled);
-      jsy163Publish.setValue(jsy163UdpPublishEnabled);
-      jsy194Publish1.setValue(jsy194Channel1UdpPublishEnabled);
-      jsy194Publish2.setValue(jsy194Channel2UdpPublishEnabled);
-      jsy333PublishA.setValue(jsy333PhaseAUdpPublishEnabled);
-      jsy333PublishB.setValue(jsy333PhaseBUdpPublishEnabled);
-      jsy333PublishC.setValue(jsy333PhaseCUdpPublishEnabled);
+      preferences.putBool("jsy163_udp", enabled);
+      preferences.putBool("jsy194_ch1_udp", enabled);
+      preferences.putBool("jsy194_ch2_udp", enabled);
+      preferences.putBool("jsy333_a_udp", enabled);
+      preferences.putBool("jsy333_b_udp", enabled);
+      preferences.putBool("jsy333_c_udp", enabled);
+      jsy163Publish.setValue(enabled);
+      jsy194Publish1.setValue(enabled);
+      jsy194Publish2.setValue(enabled);
+      jsy333PublishA.setValue(enabled);
+      jsy333PublishB.setValue(enabled);
+      jsy333PublishC.setValue(enabled);
     }
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
-    switch (prevData.model) {
+    switch (savedJSYData.model) {
       case MYCILA_JSY_MK_1031:
       case MYCILA_JSY_MK_163:
-        root["switch"] = jsy163UdpPublishEnabled ? "on" : "off";
+        root["switch"] = jsy163Publish.value() ? "on" : "off";
         break;
       case MYCILA_JSY_MK_193:
       case MYCILA_JSY_MK_194:
-        root["switch"] = jsy194Channel1UdpPublishEnabled || jsy194Channel2UdpPublishEnabled ? "on" : "off";
+        root["switch"] = jsy194Publish1.value() || jsy194Publish2.value() ? "on" : "off";
         break;
       case MYCILA_JSY_MK_333:
-        root["switch"] = jsy333PhaseAUdpPublishEnabled || jsy333PhaseBUdpPublishEnabled || jsy333PhaseCUdpPublishEnabled ? "on" : "off";
+        root["switch"] = jsy333PublishA.value() || jsy333PublishB.value() || jsy333PublishC.value() ? "on" : "off";
         break;
       default:
         break;
@@ -947,7 +916,7 @@ void setup() {
   //   ]
   // }
   webServer.on("/rpc/EM.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
-    if (prevData.model != MYCILA_JSY_MK_333) {
+    if (savedJSYData.model != MYCILA_JSY_MK_333) {
       request->send(404);
       return;
     }
@@ -978,7 +947,7 @@ void setup() {
   //   "total_act_ret": 0
   // }
   webServer.on("/rpc/EMData.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
-    if (prevData.model != MYCILA_JSY_MK_333) {
+    if (savedJSYData.model != MYCILA_JSY_MK_333) {
       request->send(404);
       return;
     }
@@ -1001,10 +970,10 @@ void setup() {
     JsonObject root = response->getRoot();
     root["/rpc/Shelly.GetDeviceInfo"] = "Returns the device information";
     root["/rpc/Shelly.GetStatus"] = "Returns the current Shelly status";
-    if (prevData.model == MYCILA_JSY_MK_163 || prevData.model == MYCILA_JSY_MK_1031) {
+    if (savedJSYData.model == MYCILA_JSY_MK_163 || savedJSYData.model == MYCILA_JSY_MK_1031) {
       root["/rpc/EM1.GetStatus?id=0"] = "Returns the current EM1 status";
       root["/rpc/EM1Data.GetStatus?id=0"] = "Returns the current EM1 data status";
-    } else if (prevData.model == MYCILA_JSY_MK_333) {
+    } else if (savedJSYData.model == MYCILA_JSY_MK_333) {
       root["/rpc/EM1.GetStatus?id=0"] = "Returns the current EM1 status for phase A";
       root["/rpc/EM1.GetStatus?id=1"] = "Returns the current EM1 status for phase B";
       root["/rpc/EM1.GetStatus?id=2"] = "Returns the current EM1 status for phase C";
@@ -1066,7 +1035,7 @@ void setup() {
     EM1DataGetStatus(1, emeters[1].as<JsonObject>());
     EM1GetStatus(2, emeters[2].to<JsonObject>());
     EM1DataGetStatus(2, emeters[2].as<JsonObject>());
-    root["total_power"] = prevData.aggregate.activePower;
+    root["total_power"] = savedJSYData.aggregate.activePower;
     response->setLength();
     request->send(response);
   });
@@ -1082,66 +1051,44 @@ void setup() {
     energyReset.setValue(0);
     dashboard.refresh(energyReset);
   });
-  jsy194ShellyIDChan1.onChange([](uint8_t value) {
-    if (value == 0) {
-      shellyIDForJSYChannel1 = 0;
-      shellyIDForJSYChannel2 = 1;
-    } else if (value == 1) {
-      shellyIDForJSYChannel1 = 1;
-      shellyIDForJSYChannel2 = 0;
-    }
-    preferences.putUChar("shelly_id_ch1", shellyIDForJSYChannel1);
-    preferences.putUChar("shelly_id_ch2", shellyIDForJSYChannel2);
-    dashboard.refresh(jsy194ShellyIDChan1);
-    dashboard.refresh(jsy194ShellyIDChan2);
+  jsy194ChannelSwap.onChange([](bool state) {
+    preferences.putBool("jsy194_ch_swap", state);
+    jsy194ChannelSwap.setValue(state);
+    dashboard.refresh(jsy194ChannelSwap);
   });
-  jsy194ShellyIDChan2.onChange([](uint8_t value) {
-    if (value == 0) {
-      shellyIDForJSYChannel1 = 1;
-      shellyIDForJSYChannel2 = 0;
-    } else if (value == 1) {
-      shellyIDForJSYChannel1 = 0;
-      shellyIDForJSYChannel2 = 1;
-    }
-    preferences.putUChar("shelly_id_ch1", shellyIDForJSYChannel1);
-    preferences.putUChar("shelly_id_ch2", shellyIDForJSYChannel2);
-    dashboard.refresh(jsy194ShellyIDChan1);
-    dashboard.refresh(jsy194ShellyIDChan2);
+  jsy194ShellySwap.onChange([](bool state) {
+    preferences.putBool("jsy194_sh_swap", state);
+    jsy194ShellySwap.setValue(state);
+    dashboard.refresh(jsy194ShellySwap);
   });
   jsy163Publish.onChange([](bool state) {
-    jsy163UdpPublishEnabled = state;
-    preferences.putBool("jsy163_udp", jsy163UdpPublishEnabled);
-    jsy163Publish.setValue(jsy163UdpPublishEnabled);
+    preferences.putBool("jsy163_udp", state);
+    jsy163Publish.setValue(state);
     dashboard.refresh(jsy163Publish);
   });
   jsy194Publish1.onChange([](bool state) {
-    jsy194Channel1UdpPublishEnabled = state;
-    preferences.putBool("jsy194_ch1_udp", jsy194Channel1UdpPublishEnabled);
-    jsy194Publish1.setValue(jsy194Channel1UdpPublishEnabled);
+    preferences.putBool("jsy194_ch1_udp", state);
+    jsy194Publish1.setValue(state);
     dashboard.refresh(jsy194Publish1);
   });
   jsy194Publish2.onChange([](bool state) {
-    jsy194Channel2UdpPublishEnabled = state;
-    preferences.putBool("jsy194_ch2_udp", jsy194Channel2UdpPublishEnabled);
-    jsy194Publish2.setValue(jsy194Channel2UdpPublishEnabled);
+    preferences.putBool("jsy194_ch2_udp", state);
+    jsy194Publish2.setValue(state);
     dashboard.refresh(jsy194Publish2);
   });
   jsy333PublishA.onChange([](bool state) {
-    jsy333PhaseAUdpPublishEnabled = state;
-    preferences.putBool("jsy333_a_udp", jsy333PhaseAUdpPublishEnabled);
-    jsy333PublishA.setValue(jsy333PhaseAUdpPublishEnabled);
+    preferences.putBool("jsy333_a_udp", state);
+    jsy333PublishA.setValue(state);
     dashboard.refresh(jsy333PublishA);
   });
   jsy333PublishB.onChange([](bool state) {
-    jsy333PhaseBUdpPublishEnabled = state;
-    preferences.putBool("jsy333_b_udp", jsy333PhaseBUdpPublishEnabled);
-    jsy333PublishB.setValue(jsy333PhaseBUdpPublishEnabled);
+    preferences.putBool("jsy333_b_udp", state);
+    jsy333PublishB.setValue(state);
     dashboard.refresh(jsy333PublishB);
   });
   jsy333PublishC.onChange([](bool state) {
-    jsy333PhaseCUdpPublishEnabled = state;
-    preferences.putBool("jsy333_c_udp", jsy333PhaseCUdpPublishEnabled);
-    jsy333PublishC.setValue(jsy333PhaseCUdpPublishEnabled);
+    preferences.putBool("jsy333_c_udp", state);
+    jsy333PublishC.setValue(state);
     dashboard.refresh(jsy333PublishC);
   });
 
@@ -1224,35 +1171,42 @@ void setup() {
 
   // jsy
   jsy.setCallback([](const Mycila::JSY::EventType eventType, const Mycila::JSY::Data& data) {
-    if (prevData == data)
+    if (savedJSYData == data)
       return;
 
-    prevData = data;
+    savedJSYData = data;
 
-    switch (prevData.model) {
+    switch (savedJSYData.model) {
       case MYCILA_JSY_MK_1031:
-      case MYCILA_JSY_MK_163:
-        if (!jsy163UdpPublishEnabled) {
+      case MYCILA_JSY_MK_163: {
+        if (!jsy163Publish.value()) {
           messageRate = 0;
           dataRate = 0;
           return;
         }
         break;
+      }
       case MYCILA_JSY_MK_193:
-      case MYCILA_JSY_MK_194:
-        if (!jsy194Channel1UdpPublishEnabled && !jsy194Channel2UdpPublishEnabled) {
+      case MYCILA_JSY_MK_194: {
+        const bool swap = jsy194ChannelSwap.value();
+        savedJSYDataChannels[0] = swap ? savedJSYData.channel2() : savedJSYData.channel1();
+        savedJSYDataChannels[1] = swap ? savedJSYData.channel1() : savedJSYData.channel2();
+
+        if (!jsy194Publish1.value() && !jsy194Publish2.value()) {
           messageRate = 0;
           dataRate = 0;
           return;
         }
         break;
-      case MYCILA_JSY_MK_333:
-        if (!jsy333PhaseAUdpPublishEnabled && !jsy333PhaseBUdpPublishEnabled && !jsy333PhaseCUdpPublishEnabled) {
+      }
+      case MYCILA_JSY_MK_333: {
+        if (!jsy333PublishA.value() && !jsy333PublishB.value() && !jsy333PublishC.value()) {
           messageRate = 0;
           dataRate = 0;
           return;
         }
         break;
+      }
       default:
         break;
     }
@@ -1268,30 +1222,40 @@ void setup() {
     jsy.toJson(root);
 
     // filter json according to enabled udp publish
-    switch (prevData.model) {
+    switch (savedJSYData.model) {
       case MYCILA_JSY_MK_193:
-      case MYCILA_JSY_MK_194:
-        if (!jsy194Channel1UdpPublishEnabled) {
+      case MYCILA_JSY_MK_194: {
+        if (jsy194ChannelSwap.value()) {
+          savedJSYDataChannels[0].toJson(root["channel1"].to<JsonObject>());
+          savedJSYDataChannels[1].toJson(root["channel2"].to<JsonObject>());
+        }
+        if (!jsy194Publish1.value()) {
           root.remove("channel1");
         }
-        if (!jsy194Channel2UdpPublishEnabled) {
+        if (!jsy194Publish2.value()) {
           root.remove("channel2");
         }
         break;
-      case MYCILA_JSY_MK_333:
-        if (!jsy333PhaseAUdpPublishEnabled) {
+      }
+      case MYCILA_JSY_MK_333: {
+        if (!jsy333PublishA.value()) {
           root.remove("phaseA");
         }
-        if (!jsy333PhaseBUdpPublishEnabled) {
+        if (!jsy333PublishB.value()) {
           root.remove("phaseB");
         }
-        if (!jsy333PhaseCUdpPublishEnabled) {
+        if (!jsy333PublishC.value()) {
           root.remove("phaseC");
         }
         break;
+      }
       default:
         break;
     }
+
+    // Serial.print("JSY UDP JSON: ");
+    // serializeJson(root, Serial);
+    // Serial.println();
 
     size_t totalSent = sendUDP(root);
 
@@ -1332,9 +1296,9 @@ void setup() {
   if (jsyModel == MYCILA_JSY_MK_163 || jsyModel == MYCILA_JSY_MK_1031 || jsyModel == MYCILA_JSY_MK_333 || jsyModel == MYCILA_JSY_MK_UNKNOWN) {
     dashboard.remove(jsy194Publish1);
     dashboard.remove(jsy194Publish2);
-    dashboard.remove(jsy194Shelly);
-    dashboard.remove(jsy194ShellyIDChan1);
-    dashboard.remove(jsy194ShellyIDChan2);
+    dashboard.remove(jsy194ChannelConfig);
+    dashboard.remove(jsy194ChannelSwap);
+    dashboard.remove(jsy194ShellySwap);
     dashboard.remove(jsy194Data1);
     dashboard.remove(jsy194Data2);
     dashboard.remove(jsy194Charts);
