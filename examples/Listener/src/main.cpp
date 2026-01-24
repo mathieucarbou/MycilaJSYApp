@@ -22,7 +22,7 @@ static AsyncUDP udp;
 
 class UDPMessage {
   public:
-    explicit UDPMessage(size_t size) : data(new uint8_t[size]), remaining(size), index(0), lastPacketTime(millis()) {}
+    explicit UDPMessage(size_t dataSize) : data(new uint8_t[dataSize + 13]), remaining(dataSize + 13), index(0), lastPacketTime(millis()) {}
 
     ~UDPMessage() {
       delete[] data;
@@ -91,7 +91,7 @@ static void onData(AsyncUDPPacket& packet) {
       ESP_LOGD(TAG, "[UDP] Invalid packet received of size %" PRIu32 ", not coming from a supported Mycila JSY App version!", len);
       return;
     } else {
-      ESP_LOGD(TAG, "[UDP] New UDP packet detected!");
+      ESP_LOGD(TAG, "[UDP] New MycilaJSYApp packet detected!");
     }
 
     // extract message ID
@@ -105,31 +105,26 @@ static void onData(AsyncUDPPacket& packet) {
     }
 
     // extract message size
-    size_t jsonSize = 0;
-    memcpy(&jsonSize, buffer + 5, 4);
+    size_t payloadSize = 0;
+    memcpy(&payloadSize, buffer + 5, 4);
 
     // validate message size
-    if (!jsonSize) {
+    if (!payloadSize) {
       ESP_LOGD(TAG, "[UDP] Invalid message size: 0");
       return;
     } else {
-      ESP_LOGD(TAG, "[UDP] Payload size: %" PRIu32, jsonSize);
+      ESP_LOGD(TAG, "[UDP] Internal payload size: %" PRIu32, payloadSize);
     }
 
     // arbitrary limit to avoid memory exhaustion
-    if (jsonSize > 4096) {
-      ESP_LOGD(TAG, "[UDP] Message size too large: %" PRIu32, jsonSize);
+    if (payloadSize > 4096) {
+      ESP_LOGD(TAG, "[UDP] Message size too large: %" PRIu32, payloadSize);
       return;
     }
 
     // compute total reassembled message size and allocate buffer
-    reassembledMessage = new (std::nothrow) UDPMessage(jsonSize + 13);
-    if (reassembledMessage == nullptr) {
-      ESP_LOGD(TAG, "[UDP] Failed to allocate memory for reassembled message of size %" PRIu32, jsonSize + 13);
-      return;
-    } else {
-      ESP_LOGD(TAG, "[UDP] Allocated new message buffer of size %" PRIu32, jsonSize + 13);
-    }
+    reassembledMessage = new UDPMessage(payloadSize);
+    ESP_LOGD(TAG, "[UDP] Allocated new message buffer of size %" PRIu32, reassembledMessage->remaining);
 
     // save last message ID
     lastMessageID = messageID;
