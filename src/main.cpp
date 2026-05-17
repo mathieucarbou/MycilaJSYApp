@@ -20,7 +20,6 @@
 #include <WebSerial.h>
 
 #include <MycilaAppInfo.h>
-#include <MycilaCircularBuffer.h>
 #include <MycilaESPConnect.h>
 #include <MycilaJSY.h>
 #include <MycilaSystem.h>
@@ -28,7 +27,11 @@
 #include <MycilaTime.h>
 
 #include <algorithm>
+#include <numeric>
+#include <mutex>
 #include <string>
+
+#include "./ringbuf.h"
 
 #ifndef SOC_UART_HP_NUM
   #define SOC_UART_HP_NUM SOC_UART_NUM
@@ -53,7 +56,7 @@
 // #define MYCILA_UDP_MSG_TYPE_JSY_DATA 0x02 // supports all JSY models
 #define MYCILA_UDP_MSG_TYPE_JSY_DATA 0x03 // new format with message ID
 #define MYCILA_UDP_PORT              53964
-#define MYCILA_UDP_SEND_RATE_WINDOW  20
+#define MYCILA_UDP_SEND_RATE_WINDOW  15
 #define TAG                          "MycilaJSYApp"
 
 static AsyncUDP udp;
@@ -66,6 +69,7 @@ static Preferences preferences;
 static Mycila::JSY jsy;
 static Mycila::JSY::Data savedJSYData;
 static Mycila::JSY::Metrics savedJSYDataChannels[2] = {0};
+static std::mutex mutex_jsy_data;
 
 static Mycila::TaskManager coreTaskManager("core");
 static Mycila::TaskManager jsyTaskManager("jsy");
@@ -210,11 +214,11 @@ static int16_t power3HistoryY[MYCILA_GRAPH_POINTS] = {0};
 static uint16_t jsyModel = MYCILA_JSY_MK_UNKNOWN;
 
 // circular buffer for msg rate
-static Mycila::CircularBuffer<float, MYCILA_UDP_SEND_RATE_WINDOW> messageRateBuffer;
+baudvine::RingBuf<float, MYCILA_UDP_SEND_RATE_WINDOW> messageRateBuffer;
 static volatile float messageRate = 0;
 
 // circular buffer for data rate
-static Mycila::CircularBuffer<uint32_t, MYCILA_UDP_SEND_RATE_WINDOW> dataRateBuffer;
+baudvine::RingBuf<uint32_t, MYCILA_UDP_SEND_RATE_WINDOW> dataRateBuffer;
 static volatile uint32_t dataRate = 0;
 
 static Mycila::Task jsyTask("JSY", [](void* params) { jsy.read(); });
@@ -300,6 +304,8 @@ static Mycila::Task dashboardTask("Dashboard", [](void* params) {
   uptime.setValue(Mycila::Time::toDHHMMSS(Mycila::System::getUptime()));
   messageRateCard.setValue(messageRate);
   dataRateCard.setValue(dataRate);
+
+  mutex_jsy_data.lock();
 
   switch (jsyModel) {
     case MYCILA_JSY_MK_1031:
@@ -436,6 +442,8 @@ static Mycila::Task dashboardTask("Dashboard", [](void* params) {
     default:
       break;
   }
+
+  mutex_jsy_data.unlock();
 
   dashboard.sendUpdates();
 });
@@ -691,12 +699,12 @@ void setup() {
 
   // config
   preferences.begin("jsy", false);
-  jsy163Publish.setValue(preferences.getBool("jsy163_udp", true));
-  jsy194Publish1.setValue(preferences.getBool("jsy194_ch1_udp", true));
-  jsy194Publish2.setValue(preferences.getBool("jsy194_ch2_udp", true));
-  jsy333PublishA.setValue(preferences.getBool("jsy333_a_udp", true));
-  jsy333PublishB.setValue(preferences.getBool("jsy333_b_udp", true));
-  jsy333PublishC.setValue(preferences.getBool("jsy333_c_udp", true));
+  jsy163Publish.setValue(preferences.getBool("jsy163_udp", false));
+  jsy194Publish1.setValue(preferences.getBool("jsy194_ch1_udp", false));
+  jsy194Publish2.setValue(preferences.getBool("jsy194_ch2_udp", false));
+  jsy333PublishA.setValue(preferences.getBool("jsy333_a_udp", false));
+  jsy333PublishB.setValue(preferences.getBool("jsy333_b_udp", false));
+  jsy333PublishC.setValue(preferences.getBool("jsy333_c_udp", false));
   jsy194ChannelSwap.setValue(preferences.getBool("jsy194_ch_swap", false));
   jsy194ShellySwap.setValue(preferences.getBool("jsy194_sh_swap", false));
 
@@ -748,6 +756,7 @@ void setup() {
   // With no query parameter: returns the UDP data publishing state
   // With "switch" query parameter set to "on" or "off": enables or disables UDP data publishing
   webServer.on("/api/jsy/publish", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     const AsyncWebParameter* enableParam = request->getParam("switch");
     if (enableParam != nullptr) {
       bool enabled = enableParam->value() == "on";
@@ -826,6 +835,7 @@ void setup() {
   // API: /rpc/Shelly.GetDeviceInfo
   // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Shelly#shellygetdeviceinfo
   webServer.on("/rpc/Shelly.GetDeviceInfo", HTTP_GET, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
     ShellyGetDeviceInfo(root);
@@ -835,6 +845,7 @@ void setup() {
   // API: /rpc/Shelly.GetStatus
   // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Shelly#shellygetstatus
   webServer.on("/rpc/Shelly.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
     // Shelly Pro EM 50
@@ -857,6 +868,7 @@ void setup() {
   // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EM1/#em1getstatus-example
   // Example: { "id": 0, "voltage": 240.2, "current": 6.473, "act_power": 1327.6, "aprt_power": 1557.6, "pf": 0.87, "freq": 50, "calibration": "factory" }
   webServer.on("/rpc/EM1.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     int id = get_id_param(request);
     if (id == -1) {
       request->send(500);
@@ -872,6 +884,7 @@ void setup() {
   // Ref: https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/EM1Data/#em1datagetstatus-example
   // Example: { "id": 0, "total_act_energy": 2776175.11, "total_act_ret_energy": 571584.87 }
   webServer.on("/rpc/EM1Data.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     int id = get_id_param(request);
     if (id == -1) {
       request->send(500);
@@ -916,6 +929,7 @@ void setup() {
   //   ]
   // }
   webServer.on("/rpc/EM.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     if (savedJSYData.model != MYCILA_JSY_MK_333) {
       request->send(404);
       return;
@@ -947,6 +961,7 @@ void setup() {
   //   "total_act_ret": 0
   // }
   webServer.on("/rpc/EMData.GetStatus", HTTP_GET, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     if (savedJSYData.model != MYCILA_JSY_MK_333) {
       request->send(404);
       return;
@@ -966,6 +981,7 @@ void setup() {
   // API: /rpc
   // Returns the list of available API endpoints
   webServer.on("/rpc", HTTP_GET, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
     root["/rpc/Shelly.GetDeviceInfo"] = "Returns the device information";
@@ -999,6 +1015,7 @@ void setup() {
   // For old Shelly's
   // Returns the list of available API endpoints
   webServer.on("/emeter/0", HTTP_GET, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
     EM1GetStatus(0, root);
@@ -1008,6 +1025,7 @@ void setup() {
     request->send(response);
   });
   webServer.on("/emeter/1", HTTP_GET, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
     EM1GetStatus(1, root);
@@ -1017,6 +1035,7 @@ void setup() {
     request->send(response);
   });
   webServer.on("/emeter/2", HTTP_GET, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
     EM1GetStatus(2, root);
@@ -1026,6 +1045,7 @@ void setup() {
     request->send(response);
   });
   webServer.on("/status", HTTP_GET, [](AsyncWebServerRequest* request) {
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
     JsonArray emeters = root["emeters"].to<JsonArray>();
@@ -1171,8 +1191,7 @@ void setup() {
 
   // jsy
   jsy.setCallback([](const Mycila::JSY::EventType eventType, const Mycila::JSY::Data& data) {
-    if (savedJSYData == data)
-      return;
+    std::lock_guard<std::mutex> lock(mutex_jsy_data);
 
     savedJSYData = data;
 
@@ -1261,12 +1280,16 @@ void setup() {
 
     if (totalSent) {
       // update rate
-      messageRateBuffer.add(static_cast<float>(esp_timer_get_time() / 1000000.0f));
-      float diff = messageRateBuffer.diff();
-      float count = messageRateBuffer.count();
-      messageRate = diff == 0 ? 0 : count / diff;
-      dataRateBuffer.add(totalSent);
-      dataRate = diff == 0 ? 0 : dataRateBuffer.sum() / diff;
+      messageRateBuffer.push_back(millis() / 1000.0f);
+      dataRateBuffer.push_back(totalSent);
+      if (messageRateBuffer.size() > 1 && dataRateBuffer.size() > 1) {
+        float diff = messageRateBuffer.back() - messageRateBuffer.front();
+        messageRate = diff == 0 ? 0 : messageRateBuffer.size() / diff;
+        dataRate = diff == 0 ? 0 : std::reduce(dataRateBuffer.begin(), dataRateBuffer.end()) / diff;
+      } else {
+        messageRate = 0;
+        dataRate = 0;
+      }
     }
   });
 
