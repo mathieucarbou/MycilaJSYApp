@@ -27,8 +27,8 @@
 #include <MycilaTime.h>
 
 #include <algorithm>
-#include <numeric>
 #include <mutex>
+#include <numeric>
 #include <string>
 
 #include "./ringbuf.h"
@@ -1192,6 +1192,9 @@ void setup() {
   // jsy
   jsy.setCallback([](const Mycila::JSY::EventType eventType, const Mycila::JSY::Data& data) {
     std::lock_guard<std::mutex> lock(mutex_jsy_data);
+
+    if (savedJSYData == data)
+      return;
 
     savedJSYData = data;
 
