@@ -65,6 +65,8 @@ static AsyncAuthenticationMiddleware authMiddleware;
 static Mycila::ESPConnect espConnect(webServer);
 static ESPDash dashboard = ESPDash(webServer, "/dashboard", false);
 static Preferences preferences;
+static bool broadcast = true;
+static IPAddress udpDestination;
 
 static Mycila::JSY jsy;
 static Mycila::JSY::Data savedJSYData;
@@ -637,15 +639,15 @@ static size_t sendUDP(const JsonObject& json) {
     size_t sent = 0;
     switch (espConnect.getMode()) {
       case Mycila::ESPConnect::Mode::AP: {
-        sent = udp.broadcastTo(buffer + totalSent, messageSize - totalSent, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_AP);
+        sent = udp.writeTo(buffer + totalSent, messageSize - totalSent, broadcast ? IP_ADDR_BROADCAST : udpDestination, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_AP);
         break;
       }
       case Mycila::ESPConnect::Mode::STA: {
-        sent = udp.broadcastTo(buffer + totalSent, messageSize - totalSent, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_STA);
+        sent = udp.writeTo(buffer + totalSent, messageSize - totalSent, broadcast ? IP_ADDR_BROADCAST : udpDestination, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_STA);
         break;
       }
       case Mycila::ESPConnect::Mode::ETH: {
-        sent = udp.broadcastTo(buffer + totalSent, messageSize - totalSent, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_ETH);
+        sent = udp.writeTo(buffer + totalSent, messageSize - totalSent, broadcast ? IP_ADDR_BROADCAST : udpDestination, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_ETH);
         break;
       }
       default:
@@ -815,11 +817,24 @@ void setup() {
     restartTask.resume();
     request->send(200);
   });
+  // API: /api/broadcast
+  // Broadcasts the current JSY data over UDP
+  webServer.on("/api/broadcast", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (request->hasParam("to", false)) {
+      broadcast = false;
+      udpDestination.fromString(request->getParam("to", false)->value().c_str());
+    } else {
+      broadcast = true;
+    }
+    request->send(200);
+  });
   // API: /api
   // Returns the list of available API endpoints
   webServer.on("/api", HTTP_GET, [](AsyncWebServerRequest* request) {
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
+    root["/api/broadcast"] = "Broadcasts the current JSY data over UDP to all devices in the network.";
+    root["/api/broadcast?to=192.168.1.100"] = "Broadcasts the current JSY data over UDP to a specific device in the network.";
     root["/api/jsy/reset"] = "Resets the energy counters";
     root["/api/jsy/publish?switch=on"] = "Enables UDP data publishing";
     root["/api/jsy/publish?switch=off"] = "Disables UDP data publishing";
