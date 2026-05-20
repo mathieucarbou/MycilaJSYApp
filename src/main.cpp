@@ -66,7 +66,7 @@ static Mycila::ESPConnect espConnect(webServer);
 static ESPDash dashboard = ESPDash(webServer, "/dashboard", false);
 static Preferences preferences;
 static bool broadcast = true;
-static IPAddress udpDestination;
+static IPAddress broadcast_to;
 
 static Mycila::JSY jsy;
 static Mycila::JSY::Data savedJSYData;
@@ -96,8 +96,10 @@ static dash::StatisticValue networkWiFiBSSID(dashboard, "Network WiFi BSSID");
 static dash::StatisticValue networkWiFiSSID(dashboard, "Network WiFi SSID");
 static dash::StatisticValue networkWiFiRSSI(dashboard, "Network WiFi RSSI");
 static dash::StatisticValue networkWiFiSignal(dashboard, "Network WiFi Signal");
-static dash::StatisticValue<float, 2> messageRateCard(dashboard, "UDP Message Rate (msg/s)");
 static dash::StatisticValue<uint32_t> dataRateCard(dashboard, "UDP Data Rate (bytes/s)");
+static dash::StatisticValue<float, 2> messageRateCard(dashboard, "UDP Message Rate (msg/s)");
+static dash::StatisticValue<const char*> udpMode(dashboard, "UDP Mode");
+static dash::StatisticValue udpDestination(dashboard, "UDP Destination");
 static dash::StatisticValue uptime(dashboard, "Uptime");
 
 static dash::SeparatorCard sep1(dashboard, "Controls");
@@ -306,6 +308,8 @@ static Mycila::Task dashboardTask("Dashboard", [](void* params) {
   uptime.setValue(Mycila::Time::toDHHMMSS(Mycila::System::getUptime()));
   messageRateCard.setValue(messageRate);
   dataRateCard.setValue(dataRate);
+  udpMode.setValue(broadcast ? "Broadcast" : "Unicast");
+  udpDestination.setValue(broadcast ? "N/A" : broadcast_to.toString().c_str());
 
   mutex_jsy_data.lock();
 
@@ -639,15 +643,15 @@ static size_t sendUDP(const JsonObject& json) {
     size_t sent = 0;
     switch (espConnect.getMode()) {
       case Mycila::ESPConnect::Mode::AP: {
-        sent = udp.writeTo(buffer + totalSent, messageSize - totalSent, broadcast ? IP_ADDR_BROADCAST : udpDestination, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_AP);
+        sent = udp.writeTo(buffer + totalSent, messageSize - totalSent, broadcast ? IP_ADDR_BROADCAST : broadcast_to, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_AP);
         break;
       }
       case Mycila::ESPConnect::Mode::STA: {
-        sent = udp.writeTo(buffer + totalSent, messageSize - totalSent, broadcast ? IP_ADDR_BROADCAST : udpDestination, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_STA);
+        sent = udp.writeTo(buffer + totalSent, messageSize - totalSent, broadcast ? IP_ADDR_BROADCAST : broadcast_to, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_STA);
         break;
       }
       case Mycila::ESPConnect::Mode::ETH: {
-        sent = udp.writeTo(buffer + totalSent, messageSize - totalSent, broadcast ? IP_ADDR_BROADCAST : udpDestination, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_ETH);
+        sent = udp.writeTo(buffer + totalSent, messageSize - totalSent, broadcast ? IP_ADDR_BROADCAST : broadcast_to, MYCILA_UDP_PORT, tcpip_adapter_if_t::TCPIP_ADAPTER_IF_ETH);
         break;
       }
       default:
@@ -709,6 +713,10 @@ void setup() {
   jsy333PublishC.setValue(preferences.getBool("jsy333_c_udp", false));
   jsy194ChannelSwap.setValue(preferences.getBool("jsy194_ch_swap", false));
   jsy194ShellySwap.setValue(preferences.getBool("jsy194_sh_swap", false));
+  broadcast = preferences.getBool("broadcast", true);
+  if (preferences.isKey("broadcast_to")) {
+    broadcast_to.fromString(preferences.getString("broadcast_to").c_str());
+  }
 
   // tasks
   dashboardTask.setEnabledWhen([]() { return espConnect.isConnected() && !dashboard.isAsyncAccessInProgress(); });
@@ -819,28 +827,45 @@ void setup() {
   });
   // API: /api/broadcast
   // Broadcasts the current JSY data over UDP
-  webServer.on("/api/broadcast", HTTP_GET, [](AsyncWebServerRequest* request) {
-    if (request->hasParam("to", false)) {
-      broadcast = false;
-      udpDestination.fromString(request->getParam("to", false)->value().c_str());
-    } else {
-      broadcast = true;
+  webServer.on("/api/udp", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (request->hasParam("mode", false)) {
+      const AsyncWebParameter* modeParam = request->getParam("mode", false);
+      if (modeParam->value() == "broadcast") {
+        broadcast = true;
+        preferences.putBool("broadcast", true);
+      } else if (modeParam->value() == "unicast") {
+        if (!request->hasParam("to", false)) {
+          request->send(400, "application/json", "{\"error\":\"Missing 'to' parameter for unicast mode\"}");
+          return;
+        }
+        broadcast = false;
+        broadcast_to.fromString(request->getParam("to", false)->value().c_str());
+        preferences.putBool("broadcast", false);
+        preferences.putString("broadcast_to", broadcast_to.toString());
+      }
     }
-    request->send(200);
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonObject root = response->getRoot();
+    root["mode"] = broadcast ? "broadcast" : "unicast";
+    if (!broadcast)
+      root["to"] = broadcast_to.toString();
+    response->setLength();
+    request->send(response);
   });
   // API: /api
   // Returns the list of available API endpoints
   webServer.on("/api", HTTP_GET, [](AsyncWebServerRequest* request) {
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
-    root["/api/broadcast"] = "Broadcasts the current JSY data over UDP to all devices in the network.";
-    root["/api/broadcast?to=192.168.1.100"] = "Broadcasts the current JSY data over UDP to a specific device in the network.";
     root["/api/jsy/reset"] = "Resets the energy counters";
     root["/api/jsy/publish?switch=on"] = "Enables UDP data publishing";
     root["/api/jsy/publish?switch=off"] = "Disables UDP data publishing";
     root["/api/jsy"] = "Returns the current JSY data";
     root["/api/restart"] = "Restarts the device";
     root["/api/reset"] = "Resets the device to factory defaults";
+    root["/api/udp"] = "Displays the current UDP data publishing configuration";
+    root["/api/udp?mode=broadcast"] = "Broadcasts the current JSY data over UDP to all devices in the network.";
+    root["/api/udp?mode=unicast&to=192.168.1.100"] = "Broadcasts the current JSY data over UDP to a specific device in the network.";
     response->setLength();
     request->send(response);
   });
